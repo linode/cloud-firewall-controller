@@ -1,0 +1,9 @@
+apiVersion: networking.linode.com/alpha1v1
+kind: CloudFirewall
+metadata:
+  labels:
+    app.kubernetes.io/name: cloud-firewall-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: cloudfirewall-sample
+spec:
+  # TODO(user): Add fields here

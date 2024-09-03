@@ -1,0 +1,57 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: manager-role
+  namespace: kube-system
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - linode
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch

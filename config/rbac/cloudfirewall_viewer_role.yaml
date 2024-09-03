@@ -1,0 +1,23 @@
+# permissions for end users to view cloudfirewalls.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: cloud-firewall-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: cloudfirewall-viewer-role
+rules:
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls/status
+  verbs:
+  - get
