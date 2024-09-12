@@ -17,6 +17,9 @@ limitations under the License.
 package alpha1v1
 
 import (
+	"fmt"
+	"strconv"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,8 +37,9 @@ type CloudFirewallSpec struct {
 
 // CloudFirewallStatus defines the observed state of CloudFirewall
 type CloudFirewallStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	ID         string      `json:"firewall-id,omitempty"`
+	Nodes      []int       `json:"nodes,omitempty"`
+	LastUpdate metav1.Time `json:"last-update,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -48,6 +52,18 @@ type CloudFirewall struct {
 
 	Spec   CloudFirewallSpec   `json:"spec,omitempty"`
 	Status CloudFirewallStatus `json:"status,omitempty"`
+}
+
+func (cf *CloudFirewall) Exists() bool {
+	return cf.Status.ID != ""
+}
+
+func (cf *CloudFirewall) GetID() (int, error) {
+	if cf.Exists() {
+		return strconv.Atoi(cf.Status.ID)
+	} else {
+		return 0, fmt.Errorf("CloudFirewall ID does not exist")
+	}
 }
 
 // +kubebuilder:object:root=true
