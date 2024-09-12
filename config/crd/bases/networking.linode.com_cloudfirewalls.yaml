@@ -46,6 +46,16 @@ spec:
             type: object
           status:
             description: CloudFirewallStatus defines the observed state of CloudFirewall
+            properties:
+              firewall-id:
+                type: string
+              last-update:
+                format: date-time
+                type: string
+              nodes:
+                items:
+                  type: integer
+                type: array
             type: object
         type: object
     served: true
