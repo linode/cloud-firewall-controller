@@ -63,7 +63,7 @@ func StringPtr(i string) *string {
 var defaultRuleset = lgo.FirewallRuleSet{
 	Inbound: []lgo.FirewallRule{
 		{
-			Action:      "DROP",
+			Action:      "ACCEPT",
 			Description: "Drop ICMP Traffic",
 			Label:       "drop-all-icmp",
 			Protocol:    "ICMP",
@@ -77,7 +77,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Description: "Kubelet Health Checks",
 			Label:       "allow-kubelet-health-checks",
 			Protocol:    "TCP",
-			Ports:       "10250",
+			Ports:       "10250,10256",
 			Addresses: lgo.NetworkAddresses{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
@@ -119,7 +119,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Protocol:    "TCP",
 			Ports:       "30000-32767",
 			Addresses: lgo.NetworkAddresses{
-				IPv4: &[]string{"192.168.128.0/17"},
+				IPv4: &[]string{"192.168.128.0/24"},
 			},
 		},
 		{
@@ -129,7 +129,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Protocol:    "UDP",
 			Ports:       "30000-32767",
 			Addresses: lgo.NetworkAddresses{
-				IPv4: &[]string{"192.168.128.0/17"},
+				IPv4: &[]string{"192.168.128.0/24"},
 			},
 		},
 		{
