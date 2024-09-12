@@ -56,10 +56,6 @@ type CloudFirewallReconciler struct {
 	ClusterID string
 }
 
-func StringPtr(i string) *string {
-	return &i
-}
-
 var defaultRuleset = lgo.FirewallRuleSet{
 	Inbound: []lgo.FirewallRule{
 		{
@@ -158,20 +154,14 @@ var defaultRuleset = lgo.FirewallRuleSet{
 // watch and get Linode API token
 //+kubebuilder:rbac:groups="",namespace=kube-system,resourceNames=linode,resources=secrets,verbs=get;list;watch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the CloudFirewall object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.0/pkg/reconcile
 func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	_ = log.FromContext(ctx)
 	var original alpha1v1.CloudFirewall
 	var cf alpha1v1.CloudFirewall
 
+	// This defer uses a deepcopy of the fetched CloudFirewall object to detect whether any Status updates
+	// occured during the course of a reconciliation. If any changes have occured the Status will be updated
+	// in etcd to be reflected into any subsequent reconciliations.
 	defer func() {
 		klog.V(1).Infof("[%s/%s] updating status current(%+v) update(%+v)", cf.Namespace, cf.Name, original.Status, cf.Status)
 		if !reflect.DeepEqual(cf.Status, original.Status) {
@@ -224,7 +214,11 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return
 	}
 
-	// rate limit how often we hit the Linode API
+	// Rate limit how often we hit the Linode API
+	// The incremental steps taken to add nodes to the cluster results in triggering several
+	// reconciliations per node, which can hammer to API for a short period of time with Get calls.
+	// In order to reduce that and give the scheduler a chance to flatten the reconcile calls this
+	// introduces a small wait period.
 	minimumUpdateDuration := time.Second * 10
 	if time.Since(cf.Status.LastUpdate.Time) < time.Second*10 {
 		klog.Infof("[%s/%s] update duration not met - requeuing %v", cf.Namespace, cf.Name, minimumUpdateDuration)
