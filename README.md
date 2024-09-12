@@ -18,3 +18,7 @@ KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/
 helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-controller --version 0.1.0
 KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall ./cloud-firewall-controller-0.1.0.tgz
 ```
+
+## Results
+The output from the controller is pretty striaghtforward, it will generate a Cloud Firewall with a label matching the pattern `lke-<cluster-id>` and have the following policies:
+![image](https://bits.linode.com/storage/user/911/files/84cd7bc2-51cd-44ed-975a-375165e42854)
