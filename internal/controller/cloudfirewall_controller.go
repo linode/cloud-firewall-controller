@@ -64,8 +64,8 @@ var defaultRuleset = lgo.FirewallRuleSet{
 	Inbound: []lgo.FirewallRule{
 		{
 			Action:      "ACCEPT",
-			Description: "Drop ICMP Traffic",
-			Label:       "drop-all-icmp",
+			Description: "ICMP Traffic",
+			Label:       "allow-all-icmp",
 			Protocol:    "ICMP",
 			Addresses: lgo.NetworkAddresses{
 				IPv4: &[]string{"0.0.0.0/0"},
@@ -119,7 +119,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Protocol:    "TCP",
 			Ports:       "30000-32767",
 			Addresses: lgo.NetworkAddresses{
-				IPv4: &[]string{"192.168.128.0/24"},
+				IPv4: &[]string{"192.168.255.0/24"},
 			},
 		},
 		{
@@ -129,7 +129,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Protocol:    "UDP",
 			Ports:       "30000-32767",
 			Addresses: lgo.NetworkAddresses{
-				IPv4: &[]string{"192.168.128.0/24"},
+				IPv4: &[]string{"192.168.255.0/24"},
 			},
 		},
 		{
