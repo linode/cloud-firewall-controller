@@ -14,6 +14,7 @@ KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/
 ```
   
 #### Helm Repo
+Note that the version in the helm commands is the helm chart version, not the application version.
 ```sh
 helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-controller --version 0.1.0
 KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall ./cloud-firewall-controller-0.1.0.tgz
