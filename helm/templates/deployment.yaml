@@ -38,9 +38,6 @@ spec:
             - /manager
           securityContext:
           allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           livenessProbe:
@@ -61,4 +58,3 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      terminationGracePeriodSeconds: 10
