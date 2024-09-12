@@ -1,0 +1,16 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: cloud-firewall-controller
+  name: cloud-firewall-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cloud-firewall-controller
+subjects:
+- kind: ServiceAccount
+  name: cloud-firewall-controller
+  namespace: kube-system

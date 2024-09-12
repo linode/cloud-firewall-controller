@@ -1,0 +1,48 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloud-firewall-controller
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - networking.linode.com
+  resources:
+  - cloudfirewalls/status
+  verbs:
+  - get
+  - patch
+  - update 
