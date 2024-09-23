@@ -39,10 +39,122 @@ spec:
           spec:
             description: CloudFirewallSpec defines the desired state of CloudFirewall
             properties:
-              foo:
-                description: Foo is an example field of CloudFirewall. Edit cloudfirewall_types.go
-                  to remove/update
+              firewall-id:
                 type: string
+              ruleset:
+                properties:
+                  inbound:
+                    items:
+                      properties:
+                        action:
+                          enum:
+                          - ACCEPT
+                          - DROP
+                          type: string
+                        addresses:
+                          description: |-
+                            The ruleset specs should be in sync with the structures defined in linodego:
+                            https://github.com/linode/linodego/blob/main/firewall_rules.go
+
+                            They are not directly imported in order to provide kubdebuilder with
+                            parameter limitations for the CRD. At runtime this allows the Cluster API
+                            to reject bad requests at the API rather than during reconciliation.
+                          properties:
+                            ipv4:
+                              items:
+                                pattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2]?\d))?$
+                                type: string
+                              type: array
+                            ipv6:
+                              items:
+                                pattern: (?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?
+                                type: string
+                              type: array
+                          type: object
+                        description:
+                          type: string
+                        label:
+                          type: string
+                        ports:
+                          pattern: ^((6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3})([,-]|$)){0,20}
+                          type: string
+                        protocol:
+                          enum:
+                          - TCP
+                          - UDP
+                          - ICMP
+                          - IPENCAP
+                          type: string
+                      required:
+                      - action
+                      - addresses
+                      - label
+                      - protocol
+                      type: object
+                    type: array
+                  inbound_policy:
+                    enum:
+                    - ACCEPT
+                    - DROP
+                    type: string
+                  outbound:
+                    items:
+                      properties:
+                        action:
+                          enum:
+                          - ACCEPT
+                          - DROP
+                          type: string
+                        addresses:
+                          description: |-
+                            The ruleset specs should be in sync with the structures defined in linodego:
+                            https://github.com/linode/linodego/blob/main/firewall_rules.go
+
+                            They are not directly imported in order to provide kubdebuilder with
+                            parameter limitations for the CRD. At runtime this allows the Cluster API
+                            to reject bad requests at the API rather than during reconciliation.
+                          properties:
+                            ipv4:
+                              items:
+                                pattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2]?\d))?$
+                                type: string
+                              type: array
+                            ipv6:
+                              items:
+                                pattern: (?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?
+                                type: string
+                              type: array
+                          type: object
+                        description:
+                          type: string
+                        label:
+                          type: string
+                        ports:
+                          pattern: ^((6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3})([,-]|$)){0,20}
+                          type: string
+                        protocol:
+                          enum:
+                          - TCP
+                          - UDP
+                          - ICMP
+                          - IPENCAP
+                          type: string
+                      required:
+                      - action
+                      - addresses
+                      - label
+                      - protocol
+                      type: object
+                    type: array
+                  outbound_policy:
+                    enum:
+                    - ACCEPT
+                    - DROP
+                    type: string
+                required:
+                - inbound_policy
+                - outbound_policy
+                type: object
             type: object
           status:
             description: CloudFirewallStatus defines the observed state of CloudFirewall

@@ -23,16 +23,51 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// The ruleset specs should be in sync with the structures defined in linodego:
+// https://github.com/linode/linodego/blob/main/firewall_rules.go
+//
+// They are not directly imported in order to provide kubdebuilder with
+// parameter limitations for the CRD. At runtime this allows the Cluster API
+// to reject bad requests at the API rather than during reconciliation.
+type AddressSpec struct {
+	// +kubebuilder:validation:items:Pattern=`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2]?\d))?$`
+	IPv4 *[]string `json:"ipv4,omitempty"`
+	// +kubebuilder:validation:items:Pattern=`(?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?`
+	IPv6 *[]string `json:"ipv6,omitempty"`
+}
+
+type RuleSpec struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	Action string `json:"action"`
+	// +kubebuilder:validation:Required
+	Label string `json:"label"`
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+	// +kubebuilder:validation:Pattern=`^((6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3})([,-]|$)){0,20}`
+	Ports string `json:"ports,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=TCP;UDP;ICMP;IPENCAP
+	Protocol string `json:"protocol"`
+	// +kubebuilder:validation:Required
+	Addresses AddressSpec `json:"addresses"`
+}
+
+type RulesetSpec struct {
+	Inbound []RuleSpec `json:"inbound,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	InboundPolicy string     `json:"inbound_policy,omitempty"`
+	Outbound      []RuleSpec `json:"outbound,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	OutboundPolicy string `json:"outbound_policy,omitempty"`
+}
 
 // CloudFirewallSpec defines the desired state of CloudFirewall
 type CloudFirewallSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of CloudFirewall. Edit cloudfirewall_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	ImportID string      `json:"firewall-id,omitempty"`
+	Ruleset  RulesetSpec `json:"ruleset,omitempty"`
 }
 
 // CloudFirewallStatus defines the observed state of CloudFirewall

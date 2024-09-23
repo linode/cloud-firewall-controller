@@ -1,0 +1,75 @@
+apiVersion: networking.linode.com/alpha1v1
+kind: CloudFirewall
+metadata:
+  name: default
+  namespace: kube-system
+spec:
+  ruleset:
+    outboundPolicy: "ACCEPT"
+    outbound: {}
+    inboundPolicy:  "DROP"
+    inbound:
+      - label: "allow-all-icmp"
+        action: "ACCEPT"
+        description: "ICMP Traffic"
+        protocol:    "ICMP"
+        addresses: 
+          ipv4:
+            - "0.0.0.0/0"
+          ipv6:
+            - "::/0"
+      - label:       "allow-kubelet-health-checks"
+        action:      "ACCEPT"
+        description: "Kubelet Health Checks"
+        protocol:    "TCP"
+        ports:       "10250,10256"
+        addresses:
+          ipv4:
+            - "192.168.128.0/17"
+      - label:       "allow-lke-wireguard"
+        action:      "ACCEPT"
+        description: "Cluster Wireguard Traffic"
+        protocol:    "UDP"
+        ports:       "51820"
+        addresses:
+          ipv4:
+            - "192.168.128.0/17"
+      - label:       "allow-cluster-dns-tcp"
+        action:      "ACCEPT"
+        description: "Cluster DNS"
+        protocol:    "TCP"
+        ports:       "53"
+        addresses:
+          ipv4:
+           - "192.168.128.0/17"
+      - label:       "allow-cluster-dns-udp"
+        action:      "ACCEPT"
+        description: "Cluster DNS"
+        protocol:    "UDP"
+        ports:       "53"
+        addresses:
+          ipv4:
+           - "192.168.128.0/17"
+      - label:       "allow-cluster-nodeports-tcp"
+        action:      "ACCEPT"
+        description: "Cluster Nodeports"
+        protocol:    "TCP"
+        ports:       "30000-32767"
+        addresses:
+          ipv4:
+          - "192.168.255.0/24"
+      - label:       "allow-cluster-nodeports-udp"
+        action:      "ACCEPT"
+        description: "Cluster Nodeports"
+        protocol:    "UDP"
+        ports:       "30000-32767"
+        addresses:
+          ipv4:
+           - "192.168.255.0/24"
+      - label:       "allow-cluster-nodeports-udp"
+        action:      "ACCEPT"
+        description: "IPENCAP Private"
+        protocol:    "IPENCAP"
+        addresses:
+          ipv4:
+          - "192.168.128.0/17"
