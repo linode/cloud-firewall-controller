@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -56,14 +57,14 @@ type CloudFirewallReconciler struct {
 	ClusterID string
 }
 
-var defaultRuleset = lgo.FirewallRuleSet{
-	Inbound: []lgo.FirewallRule{
+var defaultRuleset = alpha1v1.RulesetSpec{
+	Inbound: []alpha1v1.RuleSpec{
 		{
 			Action:      "ACCEPT",
 			Description: "ICMP Traffic",
 			Label:       "allow-all-icmp",
 			Protocol:    "ICMP",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"0.0.0.0/0"},
 				IPv6: &[]string{"::/0"},
 			},
@@ -74,7 +75,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-kubelet-health-checks",
 			Protocol:    "TCP",
 			Ports:       "10250,10256",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
 		},
@@ -84,7 +85,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-lke-wireguard",
 			Protocol:    "UDP",
 			Ports:       "51820",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
 		},
@@ -94,7 +95,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-cluster-dns-tcp",
 			Protocol:    "TCP",
 			Ports:       "53",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
 		},
@@ -104,7 +105,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-cluster-dns-udp",
 			Protocol:    "UDP",
 			Ports:       "53",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
 		},
@@ -114,7 +115,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-cluster-nodeports-tcp",
 			Protocol:    "TCP",
 			Ports:       "30000-32767",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.255.0/24"},
 			},
 		},
@@ -124,7 +125,7 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Label:       "allow-cluster-nodeports-udp",
 			Protocol:    "UDP",
 			Ports:       "30000-32767",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.255.0/24"},
 			},
 		},
@@ -133,13 +134,13 @@ var defaultRuleset = lgo.FirewallRuleSet{
 			Description: "IPENCAP Private",
 			Label:       "allow-cluster-nodeports-udp",
 			Protocol:    "IPENCAP",
-			Addresses: lgo.NetworkAddresses{
+			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
 			},
 		},
 	},
 	InboundPolicy:  "DROP",
-	Outbound:       []lgo.FirewallRule{},
+	Outbound:       []alpha1v1.RuleSpec{},
 	OutboundPolicy: "ACCEPT",
 }
 
@@ -205,10 +206,15 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("[%s/%s] added nodes: %v", cf.Namespace, cf.Name, added)
 	klog.Infof("[%s/%s] removed nodes: %v", cf.Namespace, cf.Name, removed)
 
+	newRuleset, err := toLinodeFirewallRuleset(cf.Spec.Ruleset)
+	if err != nil {
+		klog.Infof("[%s/%s] failed to convert FirewallRuleset - %s", cf.Namespace, cf.Name, err.Error())
+	}
+
 	if !cf.Exists() {
 		firewallLabel := fmt.Sprint("lke-", r.ClusterID)
 		klog.Infof("[%s/%s] creating firewall label=(%s)", cf.Namespace, cf.Name, firewallLabel)
-		if err = r.createFirewall(ctx, nodes, &cf); err != nil {
+		if err = r.createFirewall(ctx, nodes, &cf, newRuleset); err != nil {
 			klog.Infof("[%s/%s] failed to create firewall - %s", cf.Namespace, cf.Name, err.Error())
 		}
 		return
@@ -239,7 +245,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err != nil {
 		if FirewallIsNotFound(err) {
 			klog.Infof("[%s/%s] firewall id=(%d) not found - recreating", cf.Namespace, cf.Name, firewallID)
-			if err = r.createFirewall(ctx, nodes, &cf); err != nil {
+			if err = r.createFirewall(ctx, nodes, &cf, newRuleset); err != nil {
 				klog.Infof("[%s/%s] failed to create firewall - %s", cf.Namespace, cf.Name, err.Error())
 			}
 			// Either a firewall was created with the right node list or an error occured
@@ -250,9 +256,9 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	if !equalFirewallRuleSets(&firewall.Rules, &defaultRuleset) {
+	if !equalFirewallRuleSets(&firewall.Rules, &newRuleset) {
 		klog.Infof("[%s/%s] changes found in firewall rules id=(%d)", cf.Namespace, cf.Name, firewallID)
-		if _, err = r.lcli.UpdateFirewallRules(ctx, firewallID, defaultRuleset); err != nil {
+		if _, err = r.lcli.UpdateFirewallRules(ctx, firewallID, newRuleset); err != nil {
 			klog.Infof("[%s/%s] failed to update firewall rules id=(%d) - %s", cf.Namespace, cf.Name, firewallID, err.Error())
 			return
 		}
@@ -316,10 +322,10 @@ func (r *CloudFirewallReconciler) addNodes(ctx context.Context, nodes []int, fir
 	return
 }
 
-func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []int, cf *alpha1v1.CloudFirewall) (err error) {
+func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []int, cf *alpha1v1.CloudFirewall, rs lgo.FirewallRuleSet) (err error) {
 	opts := lgo.FirewallCreateOptions{
 		Label: fmt.Sprint("lke-", r.ClusterID),
-		Rules: defaultRuleset,
+		Rules: rs,
 		Devices: lgo.DevicesCreationOptions{
 			Linodes: nodes,
 		},
@@ -490,6 +496,23 @@ func FirewallIsNotFound(err error) bool {
 	return false
 }
 
+func toLinodeFirewallRuleset(ruleset alpha1v1.RulesetSpec) (lgo.FirewallRuleSet, error) {
+	var lrs lgo.FirewallRuleSet
+	var err error
+
+	rulesetStr, err := json.Marshal(ruleset)
+	if err != nil {
+		return lgo.FirewallRuleSet{}, fmt.Errorf("unable to marshal CloudFirewall ruleset - %s", err.Error())
+	}
+
+	err = json.Unmarshal(rulesetStr, &lrs)
+	if err != nil {
+		return lgo.FirewallRuleSet{}, fmt.Errorf("unable to unmarshal CloudFirewall ruleset - %s", err.Error())
+	}
+
+	return lrs, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts internal.LinodeApiOptions) error {
 	r.lApiOpts = opts
@@ -519,10 +542,13 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 							Name:      "default",
 							Namespace: "kube-system",
 						},
+						Spec: alpha1v1.CloudFirewallSpec{
+							Ruleset: defaultRuleset,
+						},
 					}
 					klog.Infof("[%s/%s] creating cluster default CloudFirewall object", cfObj.Namespace, cfObj.Name)
 					if err := mgr.GetClient().Create(ctx, cfObj); err != nil {
-						klog.Errorf("[%s/%s] failed to create default CloudFirewall", cfObj.Namespace, cfObj.Name)
+						klog.Errorf("[%s/%s] failed to create default CloudFirewall - %s", cfObj.Namespace, cfObj.Name, err.Error())
 					}
 					// No need to schedule a reconcile here, the creation of the object will generate a reconciliation
 					return reqs
