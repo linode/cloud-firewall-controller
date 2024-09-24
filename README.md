@@ -9,7 +9,7 @@ Installation via helm can be achieved in two ways, either through the helm direc
 ```sh
 git clone git@bits.linode.com:hwagner/cloud-firewall-controller.git
 cd cloud-firewall-controller
-git checkout v0.1.0
+git checkout v0.1.2
 KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/
 ```
   
