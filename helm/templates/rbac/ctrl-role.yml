@@ -4,7 +4,20 @@ kind: Role
 metadata:
   name: cloud-firewall-controller
   namespace: kube-system
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
 rules:
+- apiGroups:
+  - apps
+  resourceNames:
+  - cloud-firewall-controller
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - ""
   resourceNames:

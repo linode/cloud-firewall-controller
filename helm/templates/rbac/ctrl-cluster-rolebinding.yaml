@@ -5,6 +5,9 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: cloud-firewall-controller
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
   name: cloud-firewall-controller
 roleRef:
   apiGroup: rbac.authorization.k8s.io

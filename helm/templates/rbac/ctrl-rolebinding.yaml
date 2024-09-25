@@ -5,6 +5,9 @@ metadata:
   labels:
     app.kubernetes.io/name: cloud-firewall-controller
     app.kubernetes.io/managed-by: helm
+  annotations:
+    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook-weight": "-5"
   name: cloud-firewall-controller
   namespace: kube-system
 roleRef:
