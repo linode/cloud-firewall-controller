@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -159,13 +161,24 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	_ = log.FromContext(ctx)
 	var original alpha1v1.CloudFirewall
 	var cf alpha1v1.CloudFirewall
+	var deleted bool
 
 	// This defer uses a deepcopy of the fetched CloudFirewall object to detect whether any Status updates
 	// occured during the course of a reconciliation. If any changes have occured the Status will be updated
 	// in etcd to be reflected into any subsequent reconciliations.
 	defer func() {
-		klog.V(1).Infof("[%s/%s] updating status current(%+v) update(%+v)", cf.Namespace, cf.Name, original.Status, cf.Status)
-		if !reflect.DeepEqual(cf.Status, original.Status) {
+		if deleted {
+			// do nothing the object is being removed
+		} else if !reflect.DeepEqual(cf.ObjectMeta, original.ObjectMeta) {
+			// If the metadata has changed we need to update the whole object
+			klog.V(1).Infof("[%s/%s] metadata change detected current(%+v) update(%+v)", cf.Namespace, cf.Name, original.ObjectMeta, cf.ObjectMeta)
+			cf.Status.LastUpdate = metav1.Time{Time: time.Now()}
+			if e := r.Update(ctx, &cf); e != nil {
+				err = fmt.Errorf("CloudFirewall update failed: err=%s", e)
+			}
+		} else if !reflect.DeepEqual(cf.Status, original.Status) {
+			// Otherwise we can just update the internal status
+			klog.V(1).Infof("[%s/%s] status change detected current(%+v) update(%+v)", cf.Namespace, cf.Name, original.Status, cf.Status)
 			cf.Status.LastUpdate = metav1.Time{Time: time.Now()}
 			if e := r.Status().Update(ctx, &cf); e != nil {
 				err = fmt.Errorf("CloudFirewall status update failed: err=%s", e)
@@ -176,7 +189,8 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// We require a CloudFirewall object in etcd to track state across reconciliations
 	if err = r.Get(ctx, req.NamespacedName, &cf); err != nil {
 		klog.Errorf("[%s/%s] failed to fetch CloudFirewall state - %s", req.Namespace, req.Name, err.Error())
-		return
+		// If the object no longer exists we don't want to come back
+		return ctrl.Result{}, nil
 	}
 	// Save current state to compare in the defer function
 	original = *cf.DeepCopy()
@@ -240,6 +254,25 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Errorf("[%s/%s] failed to get firewallID - %s", cf.Namespace, cf.Name, err.Error())
 		return
 	}
+
+	if err = r.checkOwnership(ctx, &cf); err != nil {
+		klog.Errorf("[%s/%s] failed finalizer check - %s", cf.Namespace, cf.Name, err.Error())
+		return ctrl.Result{
+			RequeueAfter: minimumUpdateDuration,
+			Requeue:      true,
+		}, err
+	}
+
+	if deleted, err = r.checkFinalizer(ctx, &cf); err != nil {
+		klog.Errorf("[%s/%s] failed finalizer check - %s", cf.Namespace, cf.Name, err.Error())
+		return ctrl.Result{
+			RequeueAfter: minimumUpdateDuration,
+			Requeue:      true,
+		}, err
+	} else if deleted {
+		return
+	}
+
 	klog.Infof("[%s/%s] getting firewall id=(%d)", cf.Namespace, cf.Name, firewallID)
 	firewall, err = r.lcli.GetFirewall(ctx, firewallID)
 	if err != nil {
@@ -284,6 +317,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	// On reconciliation success no need to reconcile unless triggered by Watch
 	// Periodically we can reconcile to verify status
+	klog.Infof("[%s/%s] reconcile complete firewall id=(%d)", cf.Namespace, cf.Name, firewallID)
 	return ctrl.Result{
 		Requeue:      false,
 		RequeueAfter: 10 * time.Hour,
@@ -293,6 +327,82 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func remove(s []int, i int) []int {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
+}
+
+func (r *CloudFirewallReconciler) checkOwnership(ctx context.Context, cf *alpha1v1.CloudFirewall) error {
+	owner := metav1.GetControllerOf(cf)
+	if owner != nil {
+		return nil
+	}
+
+	// If the CloudFirewall has no owner attach it to this controller so it can be garbage
+	// collected if the controller is deleted.
+	ctrlDpl := appsv1.Deployment{}
+	err := r.Get(ctx, client.ObjectKey{
+		Name:      "cloud-firewall-controller",
+		Namespace: "kube-system",
+	},
+		&ctrlDpl)
+	if err != nil {
+		return fmt.Errorf("failed to get controller deployment: %s", err.Error())
+	}
+
+	klog.Infof("[%s/%s] set controller reference controller=(%s/%s)", cf.Namespace, cf.Name, ctrlDpl.Namespace, ctrlDpl.Name)
+	if err = ctrl.SetControllerReference(&ctrlDpl, cf, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %s", err.Error())
+	}
+
+	return nil
+}
+
+func (r *CloudFirewallReconciler) checkFinalizer(ctx context.Context, cf *alpha1v1.CloudFirewall) (bool, error) {
+	finalizerName := "cloudfirewalls.networking.linode.com/finalizer"
+	deleted := false
+
+	if cf.DeletionTimestamp.IsZero() {
+		klog.Infof("[%s/%s]  adding finalizer finalizer=(%s) id=(%s)", cf.Namespace, cf.Name, finalizerName, cf.Status.ID)
+		if !controllerutil.ContainsFinalizer(cf, finalizerName) {
+			controllerutil.AddFinalizer(cf, finalizerName)
+			return deleted, nil
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(cf, finalizerName) {
+			// our finalizer is present, so lets handle firewall deletion
+			if err := r.deleteExternalResources(context.WithoutCancel(ctx), cf); err != nil {
+				// if fail to delete the external dependency here, return with error
+				// so that it can be retried.
+				return deleted, err
+			}
+			klog.Infof("[%s/%s] firewall deleted id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
+			deleted = true
+
+			// remove our finalizer from the list and update it.
+			if controllerutil.RemoveFinalizer(cf, finalizerName) {
+				if err := r.Update(context.WithoutCancel(ctx), cf); err != nil {
+					klog.Infof("[%s/%s] failed to update finalizer - %s", cf.Namespace, cf.Name, err.Error())
+				}
+			} else {
+				klog.Infof("[%s/%s] failed to remove finalizer id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
+			}
+		} else {
+			klog.Infof("[%s/%s] deletion called with no finalizer found id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
+		}
+	}
+
+	return deleted, nil
+}
+
+func (r CloudFirewallReconciler) deleteExternalResources(ctx context.Context, cf *alpha1v1.CloudFirewall) (err error) {
+	klog.Infof("[%s/%s] deleting firewall (%s)", cf.Namespace, cf.Name, cf.Status.ID)
+	cfId, err := cf.GetID()
+	if err != nil {
+		err = fmt.Errorf("failed to get cluster ID - %s", err.Error())
+	}
+
+	if err = r.lcli.DeleteFirewall(ctx, cfId); err != nil {
+		err = fmt.Errorf("failed to delete firewall (%d) - %s", cfId, err.Error())
+	}
+	return
 }
 
 func (r *CloudFirewallReconciler) removeNodes(ctx context.Context, nodes []int, firewallID int, cf *alpha1v1.CloudFirewall) (err error) {
