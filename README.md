@@ -3,12 +3,14 @@ Controller for minimum cluster Cloud Firewall policies. The intention is to use 
 
 ## Installation
 ### Helm
-Installation via helm can be achieved in two ways, either through the helm directory checked out at the appropriate tag or githash, or through a helm repository. Either option will result in the same objects being installed into the appropriate locations in an LKE cluster.
+Installation via [helm](https://helm.sh/docs/intro/install/) can be achieved in two ways, either through checking out the appropriate code version locally, or through the helm repository. Either option will result in the same objects being installed into the appropriate locations in an LKE cluster.
 
-#### Directory Option
+#### Local Checkout
 ```sh
 git clone git@bits.linode.com:hwagner/cloud-firewall-controller.git
 cd cloud-firewall-controller 
+# (optional) git checkout <tag> 
+
 export KUBECONFIG=<kubeconfig-path> 
 helm upgrade --install cloud-firewall-crd helm/crd \
 && kubectl wait --for condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com \
