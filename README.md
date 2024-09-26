@@ -10,13 +10,16 @@ Installation via helm can be achieved in two ways, either through the helm direc
 git clone git@bits.linode.com:hwagner/cloud-firewall-controller.git
 cd cloud-firewall-controller
 git checkout v0.1.2
-KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/
+KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall-crd helm/crd
+KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/controller
 ```
   
 #### Helm Repo
 Note that the version in the helm commands is the helm chart version, not the application version.
 ```sh
+helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-crd --version 0.1.0
 helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-controller --version 0.1.0
+KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall-crd ./cloud-firewall-crd-0.1.0.tgz
 KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall ./cloud-firewall-controller-0.1.0.tgz
 ```
 
