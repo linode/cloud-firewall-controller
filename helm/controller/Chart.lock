@@ -1,6 +1,0 @@
-dependencies:
-- name: cloud-firewall-crd
-  repository: oci://registry-1.docker.io/hwagner
-  version: 0.1.0
-digest: sha256:68a9d439d9fc83329f03190446fd5321c4dd9754a7702d032b037efbfb1a9435
-generated: "2024-09-26T10:49:08.363427314-04:00"

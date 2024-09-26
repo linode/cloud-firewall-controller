@@ -2,11 +2,6 @@ apiVersion: v2
 name: cloud-firewall-controller
 description: A Helm chart for Kubernetes
 
-dependencies:
-  - name: cloud-firewall-crd
-    version: 0.1.0
-    repository: oci://registry-1.docker.io/hwagner
-
 # A chart can be either an 'application' or a 'library' chart.
 #
 # Application charts are a collection of templates that can be packaged into versioned archives

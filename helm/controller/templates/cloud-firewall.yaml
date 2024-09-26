@@ -3,10 +3,15 @@ kind: CloudFirewall
 metadata:
   name: default
   namespace: kube-system
+  annotations:
+    "helm.sh/hook": post-upgrade,post-install
+    "helm.sh/hook-weight": "-5"
+  labels:
+    {{- include "cloud-firewall-controller.labels" . | nindent 4 }}
 spec:
   ruleset:
     outbound_policy: "ACCEPT"
-    outbound: {}
+    outbound: []
     inbound_policy:  "DROP"
     inbound:
       - label: "allow-all-icmp"
