@@ -2,7 +2,11 @@
 Controller for minimum cluster Cloud Firewall policies. The intention is to use this to setup the minimum security boundary for an LKE cluster.
 
 ## Installation
-### Helm
+### Dependecies
+The installation process will require the following command line tools be available on your system.
+ - [helm](https://helm.sh/docs/intro/install/)
+ - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
+
 Installation via [helm](https://helm.sh/docs/intro/install/) can be achieved in two ways, either through checking out the appropriate code version locally, or through the helm repository. Either option will result in the same objects being installed into the appropriate locations in an LKE cluster.
 
 #### Local Checkout
