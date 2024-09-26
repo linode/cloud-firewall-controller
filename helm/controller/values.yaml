@@ -3,9 +3,9 @@ replicaCount: 1
 
 image:
   repository: docker.io/hwagner/cloud-firewall-controller
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "dev"
+  # tag: "latest"
 
 # Only needed if hosting a private copy of the image
 # Update to match your private repository docker auth
