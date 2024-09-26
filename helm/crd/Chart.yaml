@@ -1,6 +1,6 @@
 apiVersion: v2
-name: cloud-firewall-controller
-description: A Helm chart for Kubernetes
+name: cloud-firewall-crd
+description: CRDs to be used in conjunction with Linode cloud-firewall-controller
 
 # A chart can be either an 'application' or a 'library' chart.
 #
