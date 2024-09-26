@@ -8,10 +8,11 @@ Installation via helm can be achieved in two ways, either through the helm direc
 #### Directory Option
 ```sh
 git clone git@bits.linode.com:hwagner/cloud-firewall-controller.git
-cd cloud-firewall-controller
-git checkout v0.1.2
-KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall-crd helm/crd
-KUBECONFIG=<kubeconfig-path> helm upgrade --install cloud-firewall helm/controller
+cd cloud-firewall-controller 
+export KUBECONFIG=<kubeconfig-path> 
+helm upgrade --install cloud-firewall-crd helm/crd \
+&& kubectl wait --for condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com \
+&& helm upgrade --install cloud-firewall helm/controller
 ```
   
 #### Helm Repo
