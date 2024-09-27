@@ -26,11 +26,11 @@ jobs:
         with:
           charts_dir: helm/controller
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Run chart-releaser for crd
         uses: helm/chart-releaser-action@v1.6.0
         with:
           charts_dir: helm/crd
         env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }}"
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
