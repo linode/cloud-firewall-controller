@@ -370,7 +370,7 @@ func (r *CloudFirewallReconciler) checkFinalizer(ctx context.Context, cf *alpha1
 	deleted := false
 
 	if cf.DeletionTimestamp.IsZero() {
-		klog.Infof("[%s/%s]  adding finalizer finalizer=(%s) id=(%s)", cf.Namespace, cf.Name, finalizerName, cf.Status.ID)
+		klog.Infof("[%s/%s] adding finalizer finalizer=(%s) id=(%s)", cf.Namespace, cf.Name, finalizerName, cf.Status.ID)
 		if !controllerutil.ContainsFinalizer(cf, finalizerName) {
 			controllerutil.AddFinalizer(cf, finalizerName)
 			return deleted, nil
