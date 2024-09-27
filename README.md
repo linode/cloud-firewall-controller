@@ -1,5 +1,5 @@
 # cloud-firewall-controller
-Controller for minimum cluster Cloud Firewall policies. The intention is to use this to setup the minimum security boundary for an LKE cluster.
+Controller for applying Cloud Firewall policies to an LKE cluster. The intention is to use this to provide a strong default security boundary for an LKE cluster with options apply custom firewall rules as needed. The controller will ensure that all nodes in the cluster are added to the same firewall ruleset.
 
 ## Installation
 ### Dependecies
