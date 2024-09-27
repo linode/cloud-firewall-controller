@@ -144,7 +144,7 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 		{
 			Action:      "ACCEPT",
 			Description: "IPENCAP Private",
-			Label:       "allow-cluster-nodeports-udp",
+			Label:       "allow-cluster-ipencap",
 			Protocol:    "IPENCAP",
 			Addresses: alpha1v1.AddressSpec{
 				IPv4: &[]string{"192.168.128.0/17"},
@@ -659,7 +659,7 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 					klog.Infof("no CloudFirewalls found")
 					cfObj := &alpha1v1.CloudFirewall{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "default",
+							Name:      "primary",
 							Namespace: "kube-system",
 						},
 						Spec: alpha1v1.CloudFirewallSpec{
