@@ -23,11 +23,26 @@ helm upgrade --install cloud-firewall-crd helm/crd \
   
 #### Helm Repo
 Note that the version in the helm commands is the helm chart version, not the application version.
+
+##### Add the cloud-firewall-controller repo
 ```sh
-helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-crd --version 0.1.0
-helm pull oci://registry-1.docker.io/hwagner/cloud-firewall-controller --version 0.1.0
-KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall-crd ./cloud-firewall-crd-0.1.0.tgz
-KUBECONFIG=<kubeconfig path> helm upgrade --install cloud-firewall ./cloud-firewall-controller-0.1.0.tgz
+helm repo add linode-cfw https://linode.github.io/cloud-firewall-controller
+helm repo update linode-cfw
+```
+
+##### Install the CRDs and Controller
+```sh
+export KUBECONFIG=<kubeconfig-path> 
+helm install cloud-firewall-crd linode-cfw/cloud-firewall-crd \
+&& kubectl wait --for condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com \
+&& helm install cloud-firewall-ctrl linode-cfw/cloud-firewall-controller
+```
+
+##### Uninstall
+```sh
+export KUBECONFIG=<kubeconfig-path> 
+helm delete cloud-firewall-controller
+helm delete cloud-firewall-crd
 ```
 
 ## Results
