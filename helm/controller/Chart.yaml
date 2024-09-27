@@ -1,6 +1,6 @@
 apiVersion: v2
 name: cloud-firewall-controller
-description: A Helm chart for Kubernetes
+description: Helm chart for deploying the Cloud Firewall Controller to support CF management from within an LKE cluster.
 
 # A chart can be either an 'application' or a 'library' chart.
 #
