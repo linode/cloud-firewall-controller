@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Chart.Name }}
-  namespace: kube-system
+  namespace: {{ required ".Values.namespace required" .Values.namespace }}
   labels:
     {{- include "cloud-firewall-controller.labels" . | nindent 4 }}
 spec:
