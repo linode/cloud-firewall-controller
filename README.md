@@ -11,7 +11,7 @@ Installation via [helm](https://helm.sh/docs/intro/install/) can be achieved in 
 
 #### Local Checkout
 ```sh
-git clone git@bits.linode.com:hwagner/cloud-firewall-controller.git
+git clone git@bits.linode.com:linode/cloud-firewall-controller.git
 cd cloud-firewall-controller 
 # (optional) git checkout <tag> 
 
