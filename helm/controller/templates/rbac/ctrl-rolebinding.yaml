@@ -9,7 +9,7 @@ metadata:
     "helm.sh/hook": pre-upgrade,pre-install
     "helm.sh/hook-weight": "-5"
   name: cloud-firewall-controller
-  namespace: kube-system
+  namespace: {{ required ".Values.namespace required" .Values.namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -17,4 +17,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: cloud-firewall-controller
-  namespace: kube-system
+  namespace: {{ required ".Values.namespace required" .Values.namespace }}
