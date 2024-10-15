@@ -34,7 +34,7 @@ spec:
           args:
             - --leader-elect
             - --health-probe-bind-address=:8081
-            {{ -if .Values.apiToken }}
+            {{- if .Values.apiToken }}
             - --linode-creds=linode-cfw
             - --linode-creds-ns={{ required ".Values.namespace required" .Values.namespace }}
             {{- end}}
