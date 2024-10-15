@@ -1,6 +1,8 @@
 # Default values for cloud-firewall-controller.
 replicaCount: 1
 
+namespace: "kube-system"
+
 image:
   repository: docker.io/hwagner/cloud-firewall-controller
   pullPolicy: IfNotPresent
