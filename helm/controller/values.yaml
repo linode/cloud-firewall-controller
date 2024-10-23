@@ -35,6 +35,21 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
+# Additional Cloud Firewall rules can be added to the default set by adding them to the list below.
+# These will be applied along with the default ruleset. Any rule added here will below
+# applied to all nodes in the cluster.
+firewall: {}
+# Example custom inbound rule.
+#  inbound: 
+#    - label:       "allow-custom-port"
+#      action:      "ACCEPT"
+#      description: "custom-rule"
+#      protocol:    "TCP"
+#      ports:       "9999"
+#      addresses:
+#        ipv4:
+#        - "192.168.128.0/17"
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
