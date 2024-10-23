@@ -7,7 +7,11 @@ metadata:
 spec:
   ruleset:
     outbound_policy: "ACCEPT"
+    {{- if gt (len .Values.firewall.outbound) 0 }}
+    outbound: {{ toYaml .Values.firewall.outbound | nindent 6 }}
+    {{- else }}
     outbound: []
+    {{- end }}
     inbound_policy:  "DROP"
     inbound:
       - label: "allow-all-icmp"
