@@ -381,7 +381,10 @@ func (r *CloudFirewallReconciler) checkFinalizer(ctx context.Context, cf *alpha1
 			if err := r.deleteExternalResources(context.WithoutCancel(ctx), cf); err != nil {
 				// if fail to delete the external dependency here, return with error
 				// so that it can be retried.
-				return deleted, err
+				if !FirewallIsNotFound(err) {
+					// The firewall exists, but some other error occured.
+					return deleted, err
+				}
 			}
 			klog.Infof("[%s/%s] firewall deleted id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
 			deleted = true
@@ -410,7 +413,7 @@ func (r CloudFirewallReconciler) deleteExternalResources(ctx context.Context, cf
 	}
 
 	if err = r.lcli.DeleteFirewall(ctx, cfId); err != nil {
-		err = fmt.Errorf("failed to delete firewall (%d) - %s", cfId, err.Error())
+		return err
 	}
 	return
 }
