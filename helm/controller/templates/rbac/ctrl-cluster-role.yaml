@@ -18,6 +18,7 @@ rules:
   - ""
   resources:
   - nodes
+  - services
   verbs:
   - get
   - list
@@ -34,6 +35,7 @@ rules:
   - networking.linode.com
   resources:
   - cloudfirewalls
+  - nodebalancerfirewalls
   verbs:
   - create
   - delete
@@ -46,12 +48,14 @@ rules:
   - networking.linode.com
   resources:
   - cloudfirewalls/finalizers
+  - nodebalancerfirewalls/finalizers
   verbs:
   - update
 - apiGroups:
   - networking.linode.com
   resources:
   - cloudfirewalls/status
+  - nodebalancerfirewalls/status
   verbs:
   - get
   - patch

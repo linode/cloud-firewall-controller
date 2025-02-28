@@ -17,7 +17,7 @@ cd cloud-firewall-controller
 
 export KUBECONFIG=<kubeconfig-path> 
 helm upgrade --install cloud-firewall-crd helm/crd \
-&& kubectl wait --for condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com \
+&& kubectl wait --for condition=established --timeout=60s crd/cloudfirewalls.networking.linode.com crd/nodebalancerfirewalls.networking.linode.com \
 && helm upgrade --install cloud-firewall helm/controller
 ```
   

@@ -4,10 +4,10 @@ replicaCount: 1
 namespace: "kube-system"
 
 image:
-  repository: docker.io/hwagner/cloud-firewall-controller
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/apetriv-akamai/cloud-firewall-controller
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  # tag: "latest"
+  tag: "latest"
 
 # Only needed if hosting a private copy of the image
 # Update to match your private repository docker auth
@@ -55,3 +55,25 @@ firewall: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+apiToken: ""
+
+nodebalancer_firewall:
+ outbound: []
+ inbound: 
+   - label:       "allow-80-port"
+     action:      "ACCEPT"
+     description: "80-rule"
+     protocol:    "TCP"
+     ports:       "80"
+     addresses:
+       ipv4:
+       - "0.0.0.0/0"
+   - label:       "allow-443-port"
+     action:      "ACCEPT"
+     description: "443-rule"
+     protocol:    "TCP"
+     ports:       "443"
+     addresses:
+       ipv4:
+       - "0.0.0.0/0"
