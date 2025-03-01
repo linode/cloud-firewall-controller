@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"reflect"
 	"slices"
 	"sort"
@@ -29,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -216,7 +214,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	klog.Infof("[%s/%s] using clusterID (%s)", cf.Namespace, cf.Name, r.ClusterID)
 
-	if err = r.createLinodeClient(r.lApiOpts); err != nil {
+	if err = createLinodeClient(r, r.lApiOpts); err != nil {
 		// can't proceed without valid Linode Creds, retry on exponential backoff
 		klog.Errorf("[%s/%s] failed to get API credentials - %s", r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs, err.Error())
 		return
@@ -334,11 +332,6 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		Requeue:      false,
 		RequeueAfter: 10 * time.Hour,
 	}, nil
-}
-
-func remove(s []int, i int) []int {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
 }
 
 func (r *CloudFirewallReconciler) checkOwnership(ctx context.Context, cf *alpha1v1.CloudFirewall) error {
@@ -612,29 +605,29 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 				))).Complete(r)
 }
 
-func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
-	creds := &corev1.Secret{}
-	err = r.Get(context.TODO(), client.ObjectKey{
-		Name:      opts.Credentials,
-		Namespace: opts.CredentialsNs,
-	},
-		creds)
-	if err != nil {
-		return fmt.Errorf("failed to get API credentails: %s", err.Error())
-	}
+// func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
+// 	creds := &corev1.Secret{}
+// 	err = r.Get(context.TODO(), client.ObjectKey{
+// 		Name:      opts.Credentials,
+// 		Namespace: opts.CredentialsNs,
+// 	},
+// 		creds)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get API credentails: %s", err.Error())
+// 	}
 
-	apiKey := creds.Data["token"]
-	if len(apiKey) == 0 {
-		return fmt.Errorf("failed to parse Linode API token")
-	}
-	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
-	oauth2Client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-		},
-	}
-	r.lcli = lgo.NewClient(oauth2Client)
-	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
-	r.lcli.SetDebug(opts.Debug)
-	return
-}
+// 	apiKey := creds.Data["token"]
+// 	if len(apiKey) == 0 {
+// 		return fmt.Errorf("failed to parse Linode API token")
+// 	}
+// 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
+// 	oauth2Client := &http.Client{
+// 		Transport: &oauth2.Transport{
+// 			Source: tokenSource,
+// 		},
+// 	}
+// 	r.lcli = lgo.NewClient(oauth2Client)
+// 	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
+// 	r.lcli.SetDebug(opts.Debug)
+// 	return
+// }

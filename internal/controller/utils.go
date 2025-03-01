@@ -3,10 +3,14 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 
+	internal "bits.linode.com/hwagner/cloud-firewall-controller/internal/types"
 	lgo "github.com/linode/linodego"
+	"golang.org/x/oauth2"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -97,6 +101,36 @@ func checkFinalizer[T FirewallObject](ctx context.Context, r FirewallReconciler,
 	return deleted, nil
 }
 
+func createLinodeClient(r LinodeClientSetter, opts internal.LinodeApiOptions) error {
+	creds := &corev1.Secret{}
+	err := r.Get(context.TODO(), client.ObjectKey{
+		Name:      opts.Credentials,
+		Namespace: opts.CredentialsNs,
+	}, creds)
+	if err != nil {
+		return fmt.Errorf("failed to get API credentials: %s", err.Error())
+	}
+
+	apiKey := creds.Data["token"]
+	if len(apiKey) == 0 {
+		return fmt.Errorf("failed to parse Linode API token")
+	}
+
+	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey)})
+	oauth2Client := &http.Client{
+		Transport: &oauth2.Transport{
+			Source: tokenSource,
+		},
+	}
+
+	lcli := lgo.NewClient(oauth2Client)
+	lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
+	lcli.SetDebug(opts.Debug)
+
+	r.SetLinodeClient(&lcli)
+	return nil
+}
+
 func deleteExternalResources[T FirewallObject](ctx context.Context, r FirewallReconciler, obj T) error {
 	klog.Infof("[%s/%s] deleting firewall (%s)", obj.GetNamespace(), obj.GetName(), obj.GetStatusID())
 
@@ -118,7 +152,7 @@ func addDevices(ctx context.Context, r FirewallReconciler, devices []int, firewa
 		if _, err := lcli.CreateFirewallDevice(ctx, firewallID, opts); err != nil {
 			return fmt.Errorf("failed to add device (%d - %s) to firewall (%d)", device, deviceType, firewallID)
 		}
-		// Append node to status list
+		// Append device to status list
 		*deviceList = append(*deviceList, device)
 	}
 	return nil
@@ -130,9 +164,23 @@ func removeDevices(ctx context.Context, r FirewallReconciler, devices []int, fir
 		if err := lcli.DeleteFirewallDevice(ctx, firewallID, device); err != nil {
 			return fmt.Errorf("failed to remove device (%d) from firewall (%d) - %s", device, firewallID, err.Error())
 		}
-		// Remove the node from status list
-		idx := slices.Index(*deviceList, device)
-		*deviceList = remove(*deviceList, idx)
+		// Remove the device from status list
+		*deviceList = removeItem(*deviceList, device)
 	}
 	return nil
+}
+
+func removeItems[T comparable](s *[]T, itemsToRemove []T) {
+	for _, item := range itemsToRemove {
+		*s = removeItem(*s, item)
+	}
+}
+
+func removeItem[T comparable](s []T, item T) []T {
+	index := slices.Index(s, item)
+	klog.Infof("removeItem: removing=%v, from slice=%v, index=%d", item, s, index)
+	if index == -1 {
+		return s // Item not found, return original slice
+	}
+	return slices.Delete(s, index, index+1)
 }

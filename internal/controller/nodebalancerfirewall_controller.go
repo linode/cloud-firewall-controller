@@ -19,14 +19,12 @@ package controller
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"reflect"
 	"slices"
 	"strconv"
 	"time"
 
 	lgo "github.com/linode/linodego"
-	"golang.org/x/oauth2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,19 +110,19 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	klog.Infof("[%s/%s] using clusterID (%s)", nf.Namespace, nf.Name, r.ClusterID)
 
-	if err = r.createLinodeClient(r.lApiOpts); err != nil {
+	if err = createLinodeClient(r, r.lApiOpts); err != nil {
 		// can't proceed without valid Linode Creds, retry on exponential backoff
 		klog.Errorf("[%s/%s] failed to get API credentials - %s", r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs, err.Error())
 		return
 	}
 	klog.Infof("[%s/%s] using credentials (%s/%s)", nf.Namespace, nf.Name, r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs)
 
-	nodes, added, removed, err := nodeBalancerListChanges(ctx, nf, r.Client)
+	nodebalancers, added, removed, err := nodeBalancerListChanges(ctx, nf, r.Client)
 	if err != nil {
 		klog.Errorf("[%s/%s] failed to check node list - %s", nf.Namespace, nf.Name, err.Error())
 		return
 	}
-	klog.Infof("[%s/%s] current nodebalancers: %v", nf.Namespace, nf.Name, nodes)
+	klog.Infof("[%s/%s] current nodebalancers: %v", nf.Namespace, nf.Name, nodebalancers)
 	klog.Infof("[%s/%s] added nodebalancers: %v", nf.Namespace, nf.Name, added)
 	klog.Infof("[%s/%s] removed nodebalancers: %v", nf.Namespace, nf.Name, removed)
 
@@ -135,7 +133,7 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if !nf.Exists() {
 		var ids []int
-		ids, err = getNodeBalancerIDs(ctx, r, nodes)
+		ids, err = getNodeBalancerIDs(ctx, r, nodebalancers)
 		if err != nil {
 			klog.Infof("[%s/%s] failed to get NodeBalancer IDs - %s", nf.Namespace, nf.Name, err.Error())
 			return
@@ -146,15 +144,15 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 		if err = r.createFirewall(ctx, ids, &nf, newRuleset); err != nil {
 			klog.Infof("[%s/%s] failed to create firewall - %s", nf.Namespace, nf.Name, err.Error())
 		} else {
-			nf.Status.NodeBalancerHostnames = nodes
+			nf.Status.NodeBalancerHostnames = nodebalancers
 		}
 
 		return
 	}
 
 	// Rate limit how often we hit the Linode API
-	// The incremental steps taken to add nodes to the cluster results in triggering several
-	// reconciliations per node, which can hammer to API for a short period of time with Get calls.
+	// The incremental steps taken to add nodebalancers to the cluster results in triggering several
+	// reconciliations per nodebalancer, which can hammer to API for a short period of time with Get calls.
 	// In order to reduce that and give the scheduler a chance to flatten the reconcile calls this
 	// introduces a small wait period.
 	minimumUpdateDuration := time.Second * 10
@@ -196,7 +194,7 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 	if err != nil {
 		if FirewallIsNotFound(err) {
 			var ids []int
-			ids, err = getNodeBalancerIDs(ctx, r, nodes)
+			ids, err = getNodeBalancerIDs(ctx, r, nodebalancers)
 			if err != nil {
 				klog.Infof("[%s/%s] failed to get NodeBalancer IDs - %s", nf.Namespace, nf.Name, err.Error())
 				return
@@ -206,7 +204,7 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 			if err = r.createFirewall(ctx, ids, &nf, newRuleset); err != nil {
 				klog.Infof("[%s/%s] failed to create firewall - %s", nf.Namespace, nf.Name, err.Error())
 			} else {
-				nf.Status.NodeBalancerHostnames = nodes
+				nf.Status.NodeBalancerHostnames = nodebalancers
 			}
 			// Either a firewall was created with the right node list or an error occured
 			return
@@ -232,16 +230,28 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 		nbMap, err = r.getNodeBalancerIDMap(ctx)
 		if err != nil {
 			klog.Infof("failed to fetch NodeBalancer ID mapping: %s", err.Error())
+			return
+		}
+
+		// Convert hostnames to unique NodeBalancer IDs
+		convertToIDs := func(hostnames []string, nbMap map[string]int) []int {
+			ids := make(map[int]struct{})
+			for _, hostname := range hostnames {
+				if id, exists := nbMap[hostname]; exists {
+					ids[id] = struct{}{}
+				}
+			}
+			// Convert Set back to slice
+			result := make([]int, 0, len(ids))
+			for id := range ids {
+				result = append(result, id)
+			}
+			return result
 		}
 
 		if len(added) != 0 {
 			// Convert hostnames to IDs
-			ids := make([]int, 0, len(added))
-			for _, hostname := range added {
-				if id, exists := nbMap[hostname]; exists {
-					ids = append(ids, id)
-				}
-			}
+			ids := convertToIDs(added, nbMap)
 			if err = r.addDevices(ctx, ids, firewallID, &nf); err != nil {
 				klog.Infof("[%s/%s] failed to add nodebalancers to firewall id=(%d) - %s", nf.Namespace, nf.Name, firewallID, err.Error())
 				return
@@ -252,17 +262,20 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 		}
 
 		if len(removed) != 0 {
-			ids := make([]int, 0, len(removed))
-			for _, hostname := range removed {
-				if id, exists := nbMap[hostname]; exists {
-					ids = append(ids, id)
-				}
-			}
+			ids := convertToIDs(removed, nbMap)
+			klog.Infof("[%s/%s] BEFORE removeDevices: nf.Status.NodeBalancerIDs=%v", nf.Namespace, nf.Name, nf.Status.NodeBalancerIDs)
 			if err = r.removeDevices(ctx, ids, firewallID, &nf); err != nil {
 				klog.Infof("[%s/%s] failed to remove nodebalancers from firewall - %s", nf.Namespace, nf.Name, err.Error())
 				return
+			} else {
+				removeHostnames(&nf, removed)
+				// APIv4 doesn't have a deleted nodebalancer ID at this point
+				// so we need to remove the nodebalancer from the status list by
+				// adding all the current and added (if any) nodebalancers back
+				nodebalancers = append(nodebalancers, added...)
+				nf.Status.NodeBalancerIDs = convertToIDs(nodebalancers, nbMap)
 			}
-			removeHostnames(&nf, removed)
+			klog.Infof("[%s/%s] AFTER removeDevices: nf.Status.NodeBalancerIDs=%v", nf.Namespace, nf.Name, nf.Status.NodeBalancerIDs)
 			klog.Infof("[%s/%s] removed nodebalancers from firewall id=(%d) nodebalancers=(%v)", nf.Namespace, nf.Name, firewallID, ids)
 		}
 	}
@@ -276,29 +289,18 @@ func (r *NodeBalancerFirewallReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 func removeHostnames(nf *alpha1v1.NodeBalancerFirewall, hostnamesToRemove []string) {
-	for _, hostname := range hostnamesToRemove {
-		nf.Status.NodeBalancerHostnames = removeItemString(nf.Status.NodeBalancerHostnames, hostname)
-	}
+	removeItems(&nf.Status.NodeBalancerHostnames, hostnamesToRemove)
 }
 
-func removeItemString(s []string, item string) []string {
-	index := slices.Index(s, item)
-	if index == -1 {
-		return s // Item not found, return original slice
-	}
-	s[index] = s[len(s)-1]
-	return s[:len(s)-1]
-}
-
-func getNodeBalancerIDs(ctx context.Context, r *NodeBalancerFirewallReconciler, nodes []string) (ids []int, err error) {
+func getNodeBalancerIDs(ctx context.Context, r *NodeBalancerFirewallReconciler, nodebalancers []string) (ids []int, err error) {
 	nbMap, err := r.getNodeBalancerIDMap(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch NodeBalancer ID mapping: %w", err)
 	}
 
 	// Convert hostnames to IDs
-	ids = make([]int, 0, len(nodes))
-	for _, hostname := range nodes {
+	ids = make([]int, 0, len(nodebalancers))
+	for _, hostname := range nodebalancers {
 		if id, exists := nbMap[hostname]; exists {
 			ids = append(ids, id)
 		}
@@ -306,31 +308,16 @@ func getNodeBalancerIDs(ctx context.Context, r *NodeBalancerFirewallReconciler, 
 	return ids, nil
 }
 
-func (r *NodeBalancerFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
-	creds := &corev1.Secret{}
-	err = r.Get(context.TODO(), client.ObjectKey{
-		Name:      opts.Credentials,
-		Namespace: opts.CredentialsNs,
-	},
-		creds)
-	if err != nil {
-		return fmt.Errorf("failed to get API credentails: %s", err.Error())
-	}
+type LinodeClientSetter interface {
+	SetLinodeClient(client *lgo.Client)
+	Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error
+}
 
-	apiKey := creds.Data["token"]
-	if len(apiKey) == 0 {
-		return fmt.Errorf("failed to parse Linode API token")
-	}
-	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
-	oauth2Client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-		},
-	}
-	r.lcli = lgo.NewClient(oauth2Client)
-	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
-	r.lcli.SetDebug(opts.Debug)
-	return
+func (r *NodeBalancerFirewallReconciler) SetLinodeClient(client *lgo.Client) {
+	r.lcli = *client
+}
+func (r *CloudFirewallReconciler) SetLinodeClient(client *lgo.Client) {
+	r.lcli = *client
 }
 
 func nodeBalancerListChanges(ctx context.Context, nf alpha1v1.NodeBalancerFirewall, cli client.Client) (hostnames []string, added []string, removed []string, err error) {
@@ -347,7 +334,9 @@ func nodeBalancerListChanges(ctx context.Context, nf alpha1v1.NodeBalancerFirewa
 			if svc.Spec.ExternalName != "" {
 				hostnames = append(hostnames, svc.Spec.ExternalName)
 			} else if len(svc.Status.LoadBalancer.Ingress) > 0 {
-				hostnames = append(hostnames, svc.Status.LoadBalancer.Ingress[0].Hostname)
+				for _, ingress := range svc.Status.LoadBalancer.Ingress {
+					hostnames = append(hostnames, ingress.Hostname)
+				}
 			}
 		}
 	}
@@ -415,12 +404,12 @@ func (r *NodeBalancerFirewallReconciler) deleteExternalResources(ctx context.Con
 	return deleteExternalResources(ctx, r, nf)
 }
 
-func (r *NodeBalancerFirewallReconciler) addDevices(ctx context.Context, nodes []int, firewallID int, nf *alpha1v1.NodeBalancerFirewall) error {
-	return addDevices(ctx, r, nodes, firewallID, lgo.FirewallDeviceNodeBalancer, &nf.Status.NodeBalancerIDs)
+func (r *NodeBalancerFirewallReconciler) addDevices(ctx context.Context, nodebalancers []int, firewallID int, nf *alpha1v1.NodeBalancerFirewall) error {
+	return addDevices(ctx, r, nodebalancers, firewallID, lgo.FirewallDeviceNodeBalancer, &nf.Status.NodeBalancerIDs)
 }
 
-func (r *NodeBalancerFirewallReconciler) removeDevices(ctx context.Context, nodes []int, firewallID int, nf *alpha1v1.NodeBalancerFirewall) error {
-	return removeDevices(ctx, r, nodes, firewallID, &nf.Status.NodeBalancerIDs)
+func (r *NodeBalancerFirewallReconciler) removeDevices(ctx context.Context, nodebalancers []int, firewallID int, nf *alpha1v1.NodeBalancerFirewall) error {
+	return removeDevices(ctx, r, nodebalancers, firewallID, &nf.Status.NodeBalancerIDs)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -443,7 +432,10 @@ func (r *NodeBalancerFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts
 					return nil
 				}
 
-				klog.V(2).Infof("[%s/%s] LoadBalancer service updated", service.Namespace, service.Name)
+				klog.V(2).Infof("[%s/%s] LoadBalancer service updated, delaying processing for 5 seconds...", service.Namespace, service.Name)
+
+				// Introduce a delay before verification
+				time.Sleep(5 * time.Second)
 
 				// Fetch all NodeBalancerFirewall objects
 				nfList := &alpha1v1.NodeBalancerFirewallList{}
