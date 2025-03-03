@@ -1,0 +1,20 @@
+{{- if .Values.nodebalancer_firewall }}
+apiVersion: networking.linode.com/alpha1v1
+kind: NodeBalancerFirewall
+metadata:
+  name: primary
+  namespace: kube-system
+spec:
+  ruleset:
+    outbound_policy: "ACCEPT"
+    {{- if gt (len .Values.nodebalancer_firewall.outbound) 0 }}
+    outbound: {{ toYaml .Values.nodebalancer_firewall.outbound | nindent 6 }}
+    {{- else }}
+    outbound: []
+    {{- end }}
+    inbound_policy:  "DROP"
+    inbound:
+      {{- if .Values.nodebalancer_firewall.inbound }}
+      {{ toYaml .Values.nodebalancer_firewall.inbound | nindent 6 }}
+      {{- end }}
+{{- end }}

@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/networking.linode.com_cloudfirewalls.yaml
+- bases/networking.linode.com_nodebalancerfirewalls.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
