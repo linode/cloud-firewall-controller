@@ -67,7 +67,7 @@ spec:
         action:      "ACCEPT"
         description: "Calico Typha"
         protocol:    "TCP"
-        ports:       "5473,9098"
+        ports:       "5473"
         addresses:
           ipv4:
           - "192.168.128.0/17"

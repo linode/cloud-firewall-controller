@@ -123,6 +123,16 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 		},
 		{
 			Action:      "ACCEPT",
+			Description: "Calico Typha",
+			Label:       "allow-calico-typha",
+			Protocol:    "TCP",
+			Ports:       "5473",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
 			Description: "Cluster Nodeports",
 			Label:       "allow-cluster-nodeports-tcp",
 			Protocol:    "TCP",
