@@ -4,7 +4,7 @@ replicaCount: 1
 namespace: "kube-system"
 
 image:
-  repository: docker.io/hwagner/cloud-firewall-controller
+  repository: docker.io/linode/cloud-firewall-controller
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   # tag: "latest"

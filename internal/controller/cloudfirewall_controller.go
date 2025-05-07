@@ -45,8 +45,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	alpha1v1 "bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1"
-	internal "bits.linode.com/hwagner/cloud-firewall-controller/internal/types"
+	alpha1v1 "github.com/linode/cloud-firewall-controller/api/alpha1v1"
+	internal "github.com/linode/cloud-firewall-controller/internal/types"
 	lgo "github.com/linode/linodego"
 )
 
