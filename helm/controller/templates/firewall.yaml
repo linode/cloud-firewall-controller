@@ -63,6 +63,14 @@ spec:
         addresses:
           ipv4:
           - "192.168.128.0/17"
+      - label:       "allow-calico-typha"
+        action:      "ACCEPT"
+        description: "Calico Typha"
+        protocol:    "TCP"
+        ports:       "5473"
+        addresses:
+          ipv4:
+          - "192.168.128.0/17"
       - label:       "allow-cluster-nodeports-tcp"
         action:      "ACCEPT"
         description: "Cluster Nodeports"
