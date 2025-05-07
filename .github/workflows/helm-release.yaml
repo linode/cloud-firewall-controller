@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "helm/**"
+  workflow_dispatch:  # Add manual trigger option
+
 
 jobs:
   build-and-push-docker:
