@@ -6,7 +6,7 @@ domain: linode.com
 layout:
 - go.kubebuilder.io/v4
 projectName: cloud-firewall-controller
-repo: bits.linode.com/hwagner/cloud-firewall-controller
+repo: github.com/linode/cloud-firewall-controller
 resources:
 - api:
     crdVersion: v1
@@ -15,6 +15,6 @@ resources:
   domain: linode.com
   group: networking
   kind: CloudFirewall
-  path: bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1
+  path: github.com/linode/cloud-firewall-controller/api/alpha1v1
   version: alpha1v1
 version: "3"

@@ -36,9 +36,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	alpha1v1 "bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1"
-	"bits.linode.com/hwagner/cloud-firewall-controller/internal/controller"
-	"bits.linode.com/hwagner/cloud-firewall-controller/internal/types"
+	alpha1v1 "github.com/linode/cloud-firewall-controller/api/alpha1v1"
+	"github.com/linode/cloud-firewall-controller/internal/controller"
+	"github.com/linode/cloud-firewall-controller/internal/types"
 	// +kubebuilder:scaffold:imports
 )
 
