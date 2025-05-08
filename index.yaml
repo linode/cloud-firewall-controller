@@ -2,6 +2,17 @@ apiVersion: v1
 entries:
   cloud-firewall-controller:
   - apiVersion: v2
+    appVersion: v0.1.6
+    created: "2025-05-08T12:42:33.070239042Z"
+    description: Helm chart for deploying the Cloud Firewall Controller to support
+      CF management from within an LKE cluster.
+    digest: 31e43a970e76f87f178d7c6f112f5abbade6d22e675227fd39e638c48be31d5b
+    name: cloud-firewall-controller
+    type: application
+    urls:
+    - https://github.com/linode/cloud-firewall-controller/releases/download/cloud-firewall-controller-0.1.6/cloud-firewall-controller-0.1.6.tgz
+    version: 0.1.6
+  - apiVersion: v2
     appVersion: v0.1.5
     created: "2025-05-07T20:09:51.803039534Z"
     description: Helm chart for deploying the Cloud Firewall Controller to support
@@ -56,4 +67,4 @@ entries:
     urls:
     - https://github.com/linode/cloud-firewall-controller/releases/download/cloud-firewall-crd-0.1.2/cloud-firewall-crd-0.1.2.tgz
     version: 0.1.2
-generated: "2025-05-07T20:09:51.803059732Z"
+generated: "2025-05-08T12:42:33.070258709Z"
