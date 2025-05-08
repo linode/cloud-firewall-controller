@@ -22,7 +22,7 @@ jobs:
         id: get_version
         run: |
           # Extract version from Chart.yaml in the helm directory
-          CHART_VERSION=$(grep '^version:' helm/controller/Chart.yaml | awk '{print $2}')
+          CHART_VERSION=$(grep '^appVersion:' helm/controller/Chart.yaml | awk '{print $2}')
           echo "version=$CHART_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
