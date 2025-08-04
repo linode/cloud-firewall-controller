@@ -688,6 +688,46 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 				}
 
 				for _, item := range cfList.Items {
+
+					// check if this is the primary CloudFirewall object
+					if item.Name == "primary" && item.Namespace == "kube-system" {
+						updateRequired := false
+						klog.Infof("[%s/%s] found default primary CloudFirewall custom resource", item.Namespace, item.Name)
+
+						for _, rule := range defaultRuleset.Inbound {
+							if !slices.ContainsFunc(item.Spec.Ruleset.Inbound, func(r alpha1v1.RuleSpec) bool {
+								return r.Label == rule.Label
+							}) {
+								klog.Infof("[%s/%s] adding default inbound rule (%s)", item.Namespace, item.Name, rule.Label)
+								item.Spec.Ruleset.Inbound = append(item.Spec.Ruleset.Inbound, rule)
+								updateRequired = true
+							}
+						}
+						for _, rule := range defaultRuleset.Outbound {
+							if !slices.ContainsFunc(item.Spec.Ruleset.Outbound, func(r alpha1v1.RuleSpec) bool {
+								return r.Label == rule.Label
+							}) {
+								klog.Infof("[%s/%s] adding default outbound rule (%s)", item.Namespace, item.Name, rule.Label)
+								item.Spec.Ruleset.Outbound = append(item.Spec.Ruleset.Outbound, rule)
+								updateRequired = true
+							}
+						}
+						if updateRequired {
+							klog.Infof("[%s/%s] updating default CloudFirewall object with default ruleset", item.Namespace, item.Name)
+							item.Status.LastUpdate = metav1.Time{Time: time.Now()}
+							if err := mgr.GetClient().Update(ctx, &item); err != nil {
+								klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
+
+							}
+							// No need to schedule a reconcile here, the update of the object will generate a reconciliation
+							// and we can continue to the next item in the list.
+							klog.Infof("[%s/%s] default CloudFirewall object updated with default ruleset. Skipping scheduling", item.Namespace, item.Name)
+							continue // we updated the object so it will be reconciled again anyways
+						} else {
+							klog.Infof("[%s/%s] default CloudFirewall object is up-to-date", item.Namespace, item.Name)
+						}
+					}
+
 					klog.Infof("[%s] scheduling CloudFirewall reconciliation: %s", item.Namespace, item.Name)
 					reqs = append(reqs, reconcile.Request{
 						NamespacedName: types.NamespacedName{
