@@ -594,11 +594,6 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 					rulesHash := rules.Sha256Hash(item.Spec.Ruleset)
 					klog.V(2).Infof("[%s/%s] CloudFirewall ruleset hash: %s", item.Namespace, item.Name, rulesHash)
 
-					// // check if the current ruleset matches the default ruleset
-					// if currentRulesetHash == defaultRulesetHash {
-					// 	klog.Infof("[%s/%s] CloudFirewall object is up-to-date %s = %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
-					// }
-
 					if rulesHash == latestRevision {
 						klog.Infof("[%s/%s] CloudFirewall object is up-to-date with latest revision %s", item.Namespace, item.Name, latestRevision)
 					} else {
@@ -612,44 +607,14 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 								klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
 							}
 							// No need to schedule a reconcile here, the update of the object will generate a reconciliation
-							// and we can continue to the next item in the list.
+							// and we can continue to the next item.
 							klog.Infof("[%s/%s] default CloudFirewall object updated with latest default ruleset. Skipping scheduling", item.Namespace, item.Name)
-							continue // we updated the object so it will be reconciled again anyways
+							continue
 
 						} else {
 							klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset %s != %s or %v", item.Namespace, item.Name, rulesHash, latestRevision, previousRevisions)
 						}
 					}
-
-					// // generate a sha256 hash of the current ruleset
-					// hash := sha256.New()
-					// if err := json.NewEncoder(hash).Encode(item.Spec.Ruleset); err != nil {
-					// 	klog.Errorf("[%s/%s] failed to encode CloudFirewall ruleset - %s", item.Namespace, item.Name, err.Error())
-					// 	continue
-					// }
-					// currentRulesetHash := fmt.Sprintf("%x", hash.Sum(nil))
-
-					// // check if the current ruleset matches the default ruleset
-					// if currentRulesetHash == defaultRulesetHash {
-					// 	klog.Infof("[%s/%s] CloudFirewall object is up-to-date %s = %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
-					// }
-
-					// // check if the current ruleset matches the previous default ruleset
-					// if currentRulesetHash == defaultRulesetHashPrevious {
-					// 	klog.Infof("[%s/%s] CloudFirewall object is using previous default ruleset, updating to current default ruleset %s -> %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
-					// 	item.Spec.Ruleset = defaultRuleset // update to the current default ruleset
-					// 	item.Status.LastUpdate = metav1.Time{Time: time.Now()}
-					// 	if err := mgr.GetClient().Update(ctx, &item); err != nil {
-					// 		klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
-
-					// 	}
-					// 	// No need to schedule a reconcile here, the update of the object will generate a reconciliation
-					// 	// and we can continue to the next item in the list.
-					// 	klog.Infof("[%s/%s] default CloudFirewall object updated with default ruleset. Skipping scheduling", item.Namespace, item.Name)
-					// 	continue // we updated the object so it will be reconciled again anyways
-					// } else {
-					// 	klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match default ruleset or previous default ruleset. Cannot upgrade custom ruleset %s != %s or %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash, defaultRulesetHashPrevious)
-					// }
 
 					klog.Infof("[%s] scheduling CloudFirewall reconciliation: %s", item.Namespace, item.Name)
 					reqs = append(reqs, reconcile.Request{
