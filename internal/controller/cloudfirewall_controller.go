@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	alpha1v1 "github.com/linode/cloud-firewall-controller/api/alpha1v1"
+	"github.com/linode/cloud-firewall-controller/internal/rules"
 	internal "github.com/linode/cloud-firewall-controller/internal/types"
 	lgo "github.com/linode/linodego"
 )
@@ -57,113 +58,6 @@ type CloudFirewallReconciler struct {
 	lcli      lgo.Client
 	lApiOpts  internal.LinodeApiOptions
 	ClusterID string
-}
-
-var defaultRuleset = alpha1v1.RulesetSpec{
-	Inbound: []alpha1v1.RuleSpec{
-		{
-			Action:      "ACCEPT",
-			Description: "ICMP Traffic",
-			Label:       "allow-all-icmp",
-			Protocol:    "ICMP",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"0.0.0.0/0"},
-				IPv6: &[]string{"::/0"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Kubelet Health Checks",
-			Label:       "allow-kubelet-health-checks",
-			Protocol:    "TCP",
-			Ports:       "10250,10256",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster Wireguard Traffic",
-			Label:       "allow-lke-wireguard",
-			Protocol:    "UDP",
-			Ports:       "51820",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster DNS",
-			Label:       "allow-cluster-dns-tcp",
-			Protocol:    "TCP",
-			Ports:       "53",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster DNS",
-			Label:       "allow-cluster-dns-udp",
-			Protocol:    "UDP",
-			Ports:       "53",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Calico BGP",
-			Label:       "allow-calico-bgp",
-			Protocol:    "TCP",
-			Ports:       "179",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Calico Typha",
-			Label:       "allow-calico-typha",
-			Protocol:    "TCP",
-			Ports:       "5473",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster Nodeports",
-			Label:       "allow-cluster-nodeports-tcp",
-			Protocol:    "TCP",
-			Ports:       "30000-32767",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.255.0/24"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster Nodeports",
-			Label:       "allow-cluster-nodeports-udp",
-			Protocol:    "UDP",
-			Ports:       "30000-32767",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.255.0/24"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "IPENCAP Private",
-			Label:       "allow-cluster-ipencap",
-			Protocol:    "IPENCAP",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-	},
-	InboundPolicy:  "DROP",
-	Outbound:       []alpha1v1.RuleSpec{},
-	OutboundPolicy: "ACCEPT",
 }
 
 // +kubebuilder:rbac:groups=networking.linode.com,resources=cloudfirewalls,verbs=get;list;watch;create;update;patch;delete
@@ -649,6 +543,14 @@ func toLinodeFirewallRuleset(ruleset alpha1v1.RulesetSpec) (lgo.FirewallRuleSet,
 // SetupWithManager sets up the controller with the Manager.
 func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts internal.LinodeApiOptions) error {
 	r.lApiOpts = opts
+
+	latestRevision := rules.LatestRevision()
+	klog.Infof("latest ruleset revision: %s", latestRevision)
+	previousRevisions := rules.PreviousRevisions()
+	for _, rev := range previousRevisions {
+		klog.Infof("previous ruleset revision: %s", rev)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&alpha1v1.CloudFirewall{}).
 
@@ -676,7 +578,7 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 							Namespace: "kube-system",
 						},
 						Spec: alpha1v1.CloudFirewallSpec{
-							Ruleset: defaultRuleset,
+							Ruleset: rules.DefaultRuleset(),
 						},
 					}
 					klog.Infof("[%s/%s] creating cluster default CloudFirewall object", cfObj.Namespace, cfObj.Name)
@@ -689,44 +591,65 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 
 				for _, item := range cfList.Items {
 
-					// check if this is the primary CloudFirewall object
-					if item.Name == "primary" && item.Namespace == "kube-system" {
-						updateRequired := false
-						klog.Infof("[%s/%s] found default primary CloudFirewall custom resource", item.Namespace, item.Name)
+					rulesHash := rules.Sha256Hash(item.Spec.Ruleset)
+					klog.V(2).Infof("[%s/%s] CloudFirewall ruleset hash: %s", item.Namespace, item.Name, rulesHash)
 
-						for _, rule := range defaultRuleset.Inbound {
-							if !slices.ContainsFunc(item.Spec.Ruleset.Inbound, func(r alpha1v1.RuleSpec) bool {
-								return r.Label == rule.Label
-							}) {
-								klog.Infof("[%s/%s] adding default inbound rule (%s)", item.Namespace, item.Name, rule.Label)
-								item.Spec.Ruleset.Inbound = append(item.Spec.Ruleset.Inbound, rule)
-								updateRequired = true
-							}
-						}
-						for _, rule := range defaultRuleset.Outbound {
-							if !slices.ContainsFunc(item.Spec.Ruleset.Outbound, func(r alpha1v1.RuleSpec) bool {
-								return r.Label == rule.Label
-							}) {
-								klog.Infof("[%s/%s] adding default outbound rule (%s)", item.Namespace, item.Name, rule.Label)
-								item.Spec.Ruleset.Outbound = append(item.Spec.Ruleset.Outbound, rule)
-								updateRequired = true
-							}
-						}
-						if updateRequired {
-							klog.Infof("[%s/%s] updating default CloudFirewall object with default ruleset", item.Namespace, item.Name)
+					// // check if the current ruleset matches the default ruleset
+					// if currentRulesetHash == defaultRulesetHash {
+					// 	klog.Infof("[%s/%s] CloudFirewall object is up-to-date %s = %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
+					// }
+
+					if rulesHash == latestRevision {
+						klog.Infof("[%s/%s] CloudFirewall object is up-to-date with latest revision %s", item.Namespace, item.Name, latestRevision)
+					} else {
+						klog.Infof("[%s/%s] CloudFirewall object ruleset does not match latest revision %s != %s", item.Namespace, item.Name, rulesHash, latestRevision)
+
+						if slices.Contains(previousRevisions, rulesHash) {
+							klog.Infof("[%s/%s] CloudFirewall object ruleset matches a previous revision %s", item.Namespace, item.Name, rulesHash)
+							item.Spec.Ruleset = rules.DefaultRuleset() // update to the current default ruleset
 							item.Status.LastUpdate = metav1.Time{Time: time.Now()}
 							if err := mgr.GetClient().Update(ctx, &item); err != nil {
 								klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
-
 							}
 							// No need to schedule a reconcile here, the update of the object will generate a reconciliation
 							// and we can continue to the next item in the list.
-							klog.Infof("[%s/%s] default CloudFirewall object updated with default ruleset. Skipping scheduling", item.Namespace, item.Name)
+							klog.Infof("[%s/%s] default CloudFirewall object updated with latest default ruleset. Skipping scheduling", item.Namespace, item.Name)
 							continue // we updated the object so it will be reconciled again anyways
+
 						} else {
-							klog.Infof("[%s/%s] default CloudFirewall object is up-to-date", item.Namespace, item.Name)
+							klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset %s != %s or %v", item.Namespace, item.Name, rulesHash, latestRevision, previousRevisions)
 						}
 					}
+
+					// // generate a sha256 hash of the current ruleset
+					// hash := sha256.New()
+					// if err := json.NewEncoder(hash).Encode(item.Spec.Ruleset); err != nil {
+					// 	klog.Errorf("[%s/%s] failed to encode CloudFirewall ruleset - %s", item.Namespace, item.Name, err.Error())
+					// 	continue
+					// }
+					// currentRulesetHash := fmt.Sprintf("%x", hash.Sum(nil))
+
+					// // check if the current ruleset matches the default ruleset
+					// if currentRulesetHash == defaultRulesetHash {
+					// 	klog.Infof("[%s/%s] CloudFirewall object is up-to-date %s = %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
+					// }
+
+					// // check if the current ruleset matches the previous default ruleset
+					// if currentRulesetHash == defaultRulesetHashPrevious {
+					// 	klog.Infof("[%s/%s] CloudFirewall object is using previous default ruleset, updating to current default ruleset %s -> %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash)
+					// 	item.Spec.Ruleset = defaultRuleset // update to the current default ruleset
+					// 	item.Status.LastUpdate = metav1.Time{Time: time.Now()}
+					// 	if err := mgr.GetClient().Update(ctx, &item); err != nil {
+					// 		klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
+
+					// 	}
+					// 	// No need to schedule a reconcile here, the update of the object will generate a reconciliation
+					// 	// and we can continue to the next item in the list.
+					// 	klog.Infof("[%s/%s] default CloudFirewall object updated with default ruleset. Skipping scheduling", item.Namespace, item.Name)
+					// 	continue // we updated the object so it will be reconciled again anyways
+					// } else {
+					// 	klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match default ruleset or previous default ruleset. Cannot upgrade custom ruleset %s != %s or %s", item.Namespace, item.Name, currentRulesetHash, defaultRulesetHash, defaultRulesetHashPrevious)
+					// }
 
 					klog.Infof("[%s] scheduling CloudFirewall reconciliation: %s", item.Namespace, item.Name)
 					reqs = append(reqs, reconcile.Request{
