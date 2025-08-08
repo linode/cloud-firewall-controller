@@ -4,6 +4,30 @@ Controller for applying Cloud Firewall policies to an LKE cluster. The intention
 default security boundary for an LKE cluster with the option to apply custom firewall rules as needed. The controller
 will ensure that all nodes in the cluster are added to the same firewall ruleset.
 
+## Upgrade from version <1.6 to 1.6+
+If you are using the default firewall created by the controller you will need to add the following ports
+to your current configuration in order for LKE to fully function as intended.
+
+```
+    - action: ACCEPT
+      addresses:
+        ipv4:
+        - 192.168.128.0/17
+      description: Calico Typha Access 
+      label: allow-calico-typha
+      ports: 5473
+      protocol: TCP
+    - action: ACCEPT
+      addresses:
+        ipv4:
+        - 192.168.128.0/17
+      description: Prometheus Health Check
+      label: allow-prometheus-healthcheck
+      ports: 9098
+      protocol: TCP
+```
+
+
 ## Installation
 
 ### Dependencies
