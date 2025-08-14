@@ -4,10 +4,10 @@ replicaCount: 1
 namespace: "kube-system"
 
 image:
-  repository: docker.io/linode/cloud-firewall-controller
-  pullPolicy: IfNotPresent
+  repository: docker.io/mkovarik/cloud-firewall-controller
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  # tag: "latest"
+  tag: "latest"
 
 # Only needed if hosting a private copy of the image
 # Update to match your private repository docker auth

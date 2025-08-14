@@ -55,19 +55,24 @@ type RuleSpec struct {
 
 type RulesetSpec struct {
 	Inbound []RuleSpec `json:"inbound,omitempty"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	// +kubebuilder:default="DROP"
 	InboundPolicy string     `json:"inbound_policy,omitempty"`
 	Outbound      []RuleSpec `json:"outbound,omitempty"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	// +kubebuilder:default="ACCEPT"
 	OutboundPolicy string `json:"outbound_policy,omitempty"`
 }
 
 // CloudFirewallSpec defines the desired state of CloudFirewall
 type CloudFirewallSpec struct {
-	ImportID string      `json:"firewall-id,omitempty"`
-	Ruleset  RulesetSpec `json:"ruleset,omitempty"`
+	// When true (default), the controller will automatically apply the built-in default
+	// ruleset in addition to any user-specified rules in .spec.ruleset.
+	// Set to false to opt-out and manage all rules yourself.
+	// +kubebuilder:default=true
+	DefaultRules *bool       `json:"defaultRules,omitempty"`
+	ImportID     string      `json:"firewall-id,omitempty"`
+	Ruleset      RulesetSpec `json:"ruleset,omitempty"`
 }
 
 // CloudFirewallStatus defines the observed state of CloudFirewall

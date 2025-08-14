@@ -39,6 +39,10 @@ spec:
           spec:
             description: CloudFirewallSpec defines the desired state of CloudFirewall
             properties:
+              defaultRules:
+                default: true
+                description: When true, controller applies built-in default rules in addition to user rules.
+                type: boolean
               firewall-id:
                 type: string
               ruleset:
@@ -96,6 +100,7 @@ spec:
                     enum:
                     - ACCEPT
                     - DROP
+                    default: DROP
                     type: string
                   outbound:
                     items:
@@ -150,10 +155,8 @@ spec:
                     enum:
                     - ACCEPT
                     - DROP
+                    default: ACCEPT
                     type: string
-                required:
-                - inbound_policy
-                - outbound_policy
                 type: object
             type: object
           status:

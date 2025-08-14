@@ -134,7 +134,9 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("[%s/%s] added nodes: %v", cf.Namespace, cf.Name, added)
 	klog.Infof("[%s/%s] removed nodes: %v", cf.Namespace, cf.Name, removed)
 
-	newRuleset, err := toLinodeFirewallRuleset(cf.Spec.Ruleset)
+	// Build the effective ruleset based on defaultRules flag and user-specified rules
+	effective := effectiveRulesetSpec(cf.Spec)
+	newRuleset, err := toLinodeFirewallRuleset(effective)
 	if err != nil {
 		klog.Infof("[%s/%s] failed to convert FirewallRuleset - %s", cf.Namespace, cf.Name, err.Error())
 	}
@@ -540,6 +542,112 @@ func toLinodeFirewallRuleset(ruleset alpha1v1.RulesetSpec) (lgo.FirewallRuleSet,
 	return lrs, nil
 }
 
+// defaultRulesEnabled returns true when cf.Spec.DefaultRules == nil or true
+func defaultRulesEnabled(spec alpha1v1.CloudFirewallSpec) bool {
+	if spec.DefaultRules == nil {
+		return true
+	}
+	return *spec.DefaultRules
+}
+
+// effectiveRulesetSpec merges the default ruleset with user-provided rules
+// when default rules are enabled. User rules are appended after defaults to
+// ensure consistent evaluation order. Policies default to DROP/ACCEPT if empty.
+func effectiveRulesetSpec(spec alpha1v1.CloudFirewallSpec) alpha1v1.RulesetSpec {
+	rs := alpha1v1.RulesetSpec{}
+
+	// Start with policies from spec or defaults
+	if spec.Ruleset.InboundPolicy != "" {
+		rs.InboundPolicy = spec.Ruleset.InboundPolicy
+	} else {
+		rs.InboundPolicy = "DROP"
+	}
+	if spec.Ruleset.OutboundPolicy != "" {
+		rs.OutboundPolicy = spec.Ruleset.OutboundPolicy
+	} else {
+		rs.OutboundPolicy = "ACCEPT"
+	}
+
+	// Merge defaults when enabled (skip any that are already in user rules)
+	if defaultRulesEnabled(spec) {
+		def := rules.DefaultRuleset()
+		// Append default inbound rules first, but skip duplicates
+		for _, defaultRule := range def.Inbound {
+			if !containsRule(spec.Ruleset.Inbound, defaultRule) {
+				rs.Inbound = append(rs.Inbound, defaultRule)
+			}
+		}
+	}
+	// Append user inbound rules
+	if len(spec.Ruleset.Inbound) > 0 {
+		rs.Inbound = append(rs.Inbound, spec.Ruleset.Inbound...)
+	}
+	// Outbound rules: defaults currently empty; still allow user outbound
+	if defaultRulesEnabled(spec) {
+		def := rules.DefaultRuleset()
+		if len(def.Outbound) > 0 {
+			for _, defaultRule := range def.Outbound {
+				if !containsRule(spec.Ruleset.Outbound, defaultRule) {
+					rs.Outbound = append(rs.Outbound, defaultRule)
+				}
+			}
+		}
+	}
+	if len(spec.Ruleset.Outbound) > 0 {
+		rs.Outbound = append(rs.Outbound, spec.Ruleset.Outbound...)
+	}
+
+	return rs
+}
+
+// containsRule checks if the given slice already contains an equal rule
+func containsRule(list []alpha1v1.RuleSpec, target alpha1v1.RuleSpec) bool {
+	for _, r := range list {
+		if ruleEqual(r, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleEqual compares two rules for equality
+func ruleEqual(a, b alpha1v1.RuleSpec) bool {
+	if a.Action != b.Action || a.Label != b.Label || a.Description != b.Description || a.Ports != b.Ports || a.Protocol != b.Protocol {
+		return false
+	}
+	return addressEqual(a.Addresses, b.Addresses)
+}
+
+// addressEqual compares two address specs for equality
+func addressEqual(a, b alpha1v1.AddressSpec) bool {
+	if !stringSlicesEqual(a.IPv4, b.IPv4) {
+		return false
+	}
+	if !stringSlicesEqual(a.IPv6, b.IPv6) {
+		return false
+	}
+	return true
+}
+
+// stringSlicesEqual compares two string slice pointers for equality
+func stringSlicesEqual(a, b *[]string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if len(*a) != len(*b) {
+		return false
+	}
+	for i := range *a {
+		if (*a)[i] != (*b)[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts internal.LinodeApiOptions) error {
 	r.lApiOpts = opts
@@ -577,9 +685,7 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 							Name:      "primary",
 							Namespace: "kube-system",
 						},
-						Spec: alpha1v1.CloudFirewallSpec{
-							Ruleset: rules.DefaultRuleset(),
-						},
+						Spec: alpha1v1.CloudFirewallSpec{},
 					}
 					klog.Infof("[%s/%s] creating cluster default CloudFirewall object", cfObj.Namespace, cfObj.Name)
 					if err := mgr.GetClient().Create(ctx, cfObj); err != nil {
@@ -594,25 +700,31 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 					rulesHash := rules.Sha256Hash(item.Spec.Ruleset)
 					klog.V(2).Infof("[%s/%s] CloudFirewall ruleset hash: %s", item.Namespace, item.Name, rulesHash)
 
-					if rulesHash == latestRevision {
+					// Compute what the effective rules would be if we applied defaults plus user rules
+					effective := effectiveRulesetSpec(item.Spec)
+					effectiveHash := rules.Sha256Hash(effective)
+					if effectiveHash == latestRevision {
 						klog.Infof("[%s/%s] CloudFirewall object is up-to-date with latest revision %s", item.Namespace, item.Name, latestRevision)
 					} else {
-						klog.Infof("[%s/%s] CloudFirewall object ruleset does not match latest revision %s != %s", item.Namespace, item.Name, rulesHash, latestRevision)
+						klog.Infof("[%s/%s] CloudFirewall object effective ruleset does not match latest revision %s != %s", item.Namespace, item.Name, effectiveHash, latestRevision)
 
-						if slices.Contains(previousRevisions, rulesHash) {
+						if slices.Contains(previousRevisions, rulesHash) || slices.Contains(previousRevisions, effectiveHash) {
 							klog.Infof("[%s/%s] CloudFirewall object ruleset matches a previous revision %s", item.Namespace, item.Name, rulesHash)
-							item.Spec.Ruleset = rules.DefaultRuleset() // update to the current default ruleset
+							// Migrate to new model: enable defaultRules and remove explicit default rules from spec
+							trueVal := true
+							item.Spec.DefaultRules = &trueVal
+							item.Spec.Ruleset = alpha1v1.RulesetSpec{}
 							item.Status.LastUpdate = metav1.Time{Time: time.Now()}
 							if err := mgr.GetClient().Update(ctx, &item); err != nil {
 								klog.Errorf("[%s/%s] failed to update default CloudFirewall object - %s", item.Namespace, item.Name, err.Error())
 							}
 							// No need to schedule a reconcile here, the update of the object will generate a reconciliation
 							// and we can continue to the next item.
-							klog.Infof("[%s/%s] default CloudFirewall object updated with latest default ruleset. Skipping scheduling", item.Namespace, item.Name)
+							klog.Infof("[%s/%s] CloudFirewall object migrated to defaultRules model. Skipping scheduling", item.Namespace, item.Name)
 							continue
 
 						} else {
-							klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset %s != %s or %v", item.Namespace, item.Name, rulesHash, latestRevision, previousRevisions)
+							klog.Warningf("[%s/%s] CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset %s != %s or %v", item.Namespace, item.Name, effectiveHash, latestRevision, previousRevisions)
 						}
 					}
 

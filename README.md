@@ -93,8 +93,13 @@ pattern `lke-<cluster-id>` and have the following policies:
 Upgrading the cloud-firewall-controller version will apply the latest ruleset to the primary CloudFirewall custom resource
  if the rules detected match one of the previous revisions from this repo.
 
-If custom rules have been applied via the `firewall` block in the values file, these will be upgraded via a Helm upgrade
-because the custom rules are merged with the defaults using Helm templating.
+As of this release, a new field `spec.defaultRules` (default true) controls whether the built-in default rule set is
+automatically applied. Your CR can be minimal and rely on defaults, and optionally specify custom rules that will be
+appended after the defaults. Existing CRs that matched a known previous default ruleset will be migrated to this model
+automatically by the controller.
+
+If custom rules have been applied via the `firewall` block in the values file, these will be applied by the controller
+in addition to the defaults.
 
 ```yaml
 # Additional Cloud Firewall rules can be added to the default set by adding them to the list below.
