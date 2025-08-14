@@ -98,6 +98,10 @@ automatically applied. Your CR can be minimal and rely on defaults, and optional
 appended after the defaults. Existing CRs that matched a known previous default ruleset will be migrated to this model
 automatically by the controller.
 
+Additionally, you can now use `nodeIPs: true` in rule addresses instead of static IP ranges. This automatically
+populates the rule with the private IP addresses of all cluster nodes, making rules dynamic and adapting to cluster
+changes.
+
 If custom rules have been applied via the `firewall` block in the values file, these will be applied by the controller
 in addition to the defaults.
 
@@ -113,8 +117,10 @@ firewall:
       protocol:    "TCP"
       ports:       "9999"
       addresses:
-        ipv4:
-          - "192.168.128.0/17"
+        nodeIPs: true  # Use dynamic node IPs instead of static ranges
+        # Or use static addresses:
+        # ipv4:
+        #   - "192.168.128.0/17"
 ```
 
 Any ruleset customized outside of Helm (e.g., using kubectl) will need to be manually updated.

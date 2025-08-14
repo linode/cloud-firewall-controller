@@ -34,6 +34,9 @@ type AddressSpec struct {
 	IPv4 *[]string `json:"ipv4,omitempty"`
 	// +kubebuilder:validation:items:Pattern=`(?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?`
 	IPv6 *[]string `json:"ipv6,omitempty"`
+	// When true, automatically populate with private IP addresses of all cluster nodes
+	// This replaces static IP addresses with dynamic node IPs
+	NodeIPs bool `json:"nodeIPs,omitempty"`
 }
 
 type RuleSpec struct {

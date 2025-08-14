@@ -125,7 +125,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	klog.Infof("[%s/%s] using credentials (%s/%s)", cf.Namespace, cf.Name, r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs)
 
-	nodes, added, removed, err := nodeListChanges(ctx, cf, r.Client)
+	nodes, added, removed, nodeIPs, err := nodeListChanges(ctx, cf, r.Client)
 	if err != nil {
 		klog.Errorf("[%s/%s] failed to check node list - %s", cf.Namespace, cf.Name, err.Error())
 		return
@@ -135,7 +135,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	klog.Infof("[%s/%s] removed nodes: %v", cf.Namespace, cf.Name, removed)
 
 	// Build the effective ruleset based on defaultRules flag and user-specified rules
-	effective := effectiveRulesetSpec(cf.Spec)
+	effective := effectiveRulesetSpec(cf.Spec, nodeIPs)
 	newRuleset, err := toLinodeFirewallRuleset(effective)
 	if err != nil {
 		klog.Infof("[%s/%s] failed to convert FirewallRuleset - %s", cf.Namespace, cf.Name, err.Error())
@@ -368,7 +368,7 @@ func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []in
 	return
 }
 
-func nodeListChanges(ctx context.Context, cf alpha1v1.CloudFirewall, cli client.Client) (nodes []int, added []int, removed []int, err error) {
+func nodeListChanges(ctx context.Context, cf alpha1v1.CloudFirewall, cli client.Client) (nodes []int, added []int, removed []int, nodeIPs []string, err error) {
 	// Get list of cluster nodes
 	nodeList := &corev1.NodeList{}
 	if err = cli.List(ctx, nodeList); err != nil {
@@ -376,7 +376,7 @@ func nodeListChanges(ctx context.Context, cf alpha1v1.CloudFirewall, cli client.
 		return
 	}
 
-	// Build list of NodeIDs
+	// Build list of NodeIDs and collect private IPs
 	// This could be optimized, but for simplicity it is what it is
 	for _, node := range nodeList.Items {
 		var nodeID int
@@ -396,6 +396,14 @@ func nodeListChanges(ctx context.Context, cf alpha1v1.CloudFirewall, cli client.
 		}
 		klog.V(2).Infof("[%s/%s] found node (%d)", cf.Namespace, cf.Name, nodeID)
 		nodes = append(nodes, nodeID)
+
+		// Also collect private IP address for NodeIPs resolution
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				nodeIPs = append(nodeIPs, addr.Address+"/32")
+				break
+			}
+		}
 	}
 
 	for _, node := range nodes {
@@ -553,7 +561,7 @@ func defaultRulesEnabled(spec alpha1v1.CloudFirewallSpec) bool {
 // effectiveRulesetSpec merges the default ruleset with user-provided rules
 // when default rules are enabled. User rules are appended after defaults to
 // ensure consistent evaluation order. Policies default to DROP/ACCEPT if empty.
-func effectiveRulesetSpec(spec alpha1v1.CloudFirewallSpec) alpha1v1.RulesetSpec {
+func effectiveRulesetSpec(spec alpha1v1.CloudFirewallSpec, nodeIPs []string) alpha1v1.RulesetSpec {
 	rs := alpha1v1.RulesetSpec{}
 
 	// Start with policies from spec or defaults
@@ -573,28 +581,36 @@ func effectiveRulesetSpec(spec alpha1v1.CloudFirewallSpec) alpha1v1.RulesetSpec 
 		def := rules.DefaultRuleset()
 		// Append default inbound rules first, but skip duplicates
 		for _, defaultRule := range def.Inbound {
-			if !containsRule(spec.Ruleset.Inbound, defaultRule) {
-				rs.Inbound = append(rs.Inbound, defaultRule)
+			resolvedRule := resolveNodeIPs(defaultRule, nodeIPs)
+			if !containsRule(spec.Ruleset.Inbound, resolvedRule) {
+				rs.Inbound = append(rs.Inbound, resolvedRule)
 			}
 		}
 	}
-	// Append user inbound rules
+	// Append user inbound rules (also resolve NodeIPs)
 	if len(spec.Ruleset.Inbound) > 0 {
-		rs.Inbound = append(rs.Inbound, spec.Ruleset.Inbound...)
+		for _, userRule := range spec.Ruleset.Inbound {
+			resolvedRule := resolveNodeIPs(userRule, nodeIPs)
+			rs.Inbound = append(rs.Inbound, resolvedRule)
+		}
 	}
 	// Outbound rules: defaults currently empty; still allow user outbound
 	if defaultRulesEnabled(spec) {
 		def := rules.DefaultRuleset()
 		if len(def.Outbound) > 0 {
 			for _, defaultRule := range def.Outbound {
-				if !containsRule(spec.Ruleset.Outbound, defaultRule) {
-					rs.Outbound = append(rs.Outbound, defaultRule)
+				resolvedRule := resolveNodeIPs(defaultRule, nodeIPs)
+				if !containsRule(spec.Ruleset.Outbound, resolvedRule) {
+					rs.Outbound = append(rs.Outbound, resolvedRule)
 				}
 			}
 		}
 	}
 	if len(spec.Ruleset.Outbound) > 0 {
-		rs.Outbound = append(rs.Outbound, spec.Ruleset.Outbound...)
+		for _, userRule := range spec.Ruleset.Outbound {
+			resolvedRule := resolveNodeIPs(userRule, nodeIPs)
+			rs.Outbound = append(rs.Outbound, resolvedRule)
+		}
 	}
 
 	return rs
@@ -620,6 +636,9 @@ func ruleEqual(a, b alpha1v1.RuleSpec) bool {
 
 // addressEqual compares two address specs for equality
 func addressEqual(a, b alpha1v1.AddressSpec) bool {
+	if a.NodeIPs != b.NodeIPs {
+		return false
+	}
 	if !stringSlicesEqual(a.IPv4, b.IPv4) {
 		return false
 	}
@@ -646,6 +665,22 @@ func stringSlicesEqual(a, b *[]string) bool {
 		}
 	}
 	return true
+}
+
+// resolveNodeIPs replaces NodeIPs flag with actual node private IP addresses
+func resolveNodeIPs(rule alpha1v1.RuleSpec, nodeIPs []string) alpha1v1.RuleSpec {
+	if !rule.Addresses.NodeIPs {
+		return rule
+	}
+
+	// Create a copy of the rule with resolved IPs
+	resolvedRule := rule
+	resolvedRule.Addresses.NodeIPs = false
+	if len(nodeIPs) > 0 {
+		resolvedRule.Addresses.IPv4 = &nodeIPs
+	}
+
+	return resolvedRule
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -701,7 +736,8 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 					klog.V(2).Infof("[%s/%s] CloudFirewall ruleset hash: %s", item.Namespace, item.Name, rulesHash)
 
 					// Compute what the effective rules would be if we applied defaults plus user rules
-					effective := effectiveRulesetSpec(item.Spec)
+					// For migration purposes, we'll use empty nodeIPs since we're just comparing hashes
+					effective := effectiveRulesetSpec(item.Spec, []string{})
 					effectiveHash := rules.Sha256Hash(effective)
 					if effectiveHash == latestRevision {
 						klog.Infof("[%s/%s] CloudFirewall object is up-to-date with latest revision %s", item.Namespace, item.Name, latestRevision)
