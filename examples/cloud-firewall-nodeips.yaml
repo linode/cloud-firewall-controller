@@ -1,0 +1,18 @@
+apiVersion: networking.linode.com/alpha1v1
+kind: CloudFirewall
+metadata:
+  name: primary-nodeips
+  namespace: kube-system
+spec:
+  # defaultRules is true by default; uses NodeIPs for dynamic node addressing
+  ruleset:
+    # Custom rule that also uses NodeIPs
+    inbound:
+      - label: "allow-custom-app"
+        action: "ACCEPT"
+        description: "Custom application port"
+        protocol: "TCP"
+        ports: "8080"
+        addresses:
+          nodeIPs: true
+    outbound: []

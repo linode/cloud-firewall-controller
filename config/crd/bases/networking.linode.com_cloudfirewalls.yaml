@@ -39,6 +39,13 @@ spec:
           spec:
             description: CloudFirewallSpec defines the desired state of CloudFirewall
             properties:
+              defaultRules:
+                default: true
+                description: |-
+                  When true (default), the controller will automatically apply the built-in default
+                  ruleset in addition to any user-specified rules in .spec.ruleset.
+                  Set to false to opt-out and manage all rules yourself.
+                type: boolean
               firewall-id:
                 type: string
               ruleset:
@@ -70,6 +77,11 @@ spec:
                                 pattern: (?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?
                                 type: string
                               type: array
+                            nodeIPs:
+                              description: |-
+                                When true, automatically populate with private IP addresses of all cluster nodes
+                                This replaces static IP addresses with dynamic node IPs
+                              type: boolean
                           type: object
                         description:
                           type: string
@@ -93,6 +105,7 @@ spec:
                       type: object
                     type: array
                   inbound_policy:
+                    default: DROP
                     enum:
                     - ACCEPT
                     - DROP
@@ -124,6 +137,11 @@ spec:
                                 pattern: (?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?
                                 type: string
                               type: array
+                            nodeIPs:
+                              description: |-
+                                When true, automatically populate with private IP addresses of all cluster nodes
+                                This replaces static IP addresses with dynamic node IPs
+                              type: boolean
                           type: object
                         description:
                           type: string
@@ -147,13 +165,11 @@ spec:
                       type: object
                     type: array
                   outbound_policy:
+                    default: ACCEPT
                     enum:
                     - ACCEPT
                     - DROP
                     type: string
-                required:
-                - inbound_policy
-                - outbound_policy
                 type: object
             type: object
           status:

@@ -34,6 +34,9 @@ type AddressSpec struct {
 	IPv4 *[]string `json:"ipv4,omitempty"`
 	// +kubebuilder:validation:items:Pattern=`(?i)(?<ipv6>(?:[\da-f]{0,4}:){1,7}(?:(?<ipv4>(?:(?:25[0-5]|2[0-4]\d|1?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1?\d\d?))|[\da-f]{0,4}))(\/(0?\d{1,2}|1([0-1]\d|2[0-8])))?`
 	IPv6 *[]string `json:"ipv6,omitempty"`
+	// When true, automatically populate with private IP addresses of all cluster nodes
+	// This replaces static IP addresses with dynamic node IPs
+	NodeIPs bool `json:"nodeIPs,omitempty"`
 }
 
 type RuleSpec struct {
@@ -55,19 +58,24 @@ type RuleSpec struct {
 
 type RulesetSpec struct {
 	Inbound []RuleSpec `json:"inbound,omitempty"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	// +kubebuilder:default="DROP"
 	InboundPolicy string     `json:"inbound_policy,omitempty"`
 	Outbound      []RuleSpec `json:"outbound,omitempty"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=ACCEPT;DROP
+	// +kubebuilder:default="ACCEPT"
 	OutboundPolicy string `json:"outbound_policy,omitempty"`
 }
 
 // CloudFirewallSpec defines the desired state of CloudFirewall
 type CloudFirewallSpec struct {
-	ImportID string      `json:"firewall-id,omitempty"`
-	Ruleset  RulesetSpec `json:"ruleset,omitempty"`
+	// When true (default), the controller will automatically apply the built-in default
+	// ruleset in addition to any user-specified rules in .spec.ruleset.
+	// Set to false to opt-out and manage all rules yourself.
+	// +kubebuilder:default=true
+	DefaultRules *bool       `json:"defaultRules,omitempty"`
+	ImportID     string      `json:"firewall-id,omitempty"`
+	Ruleset      RulesetSpec `json:"ruleset,omitempty"`
 }
 
 // CloudFirewallStatus defines the observed state of CloudFirewall

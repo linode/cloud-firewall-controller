@@ -51,32 +51,12 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 		},
 		{
 			Action:      "ACCEPT",
-			Description: "Cluster DNS",
-			Label:       "allow-cluster-dns-tcp",
-			Protocol:    "TCP",
-			Ports:       "53",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
-			Description: "Cluster DNS",
-			Label:       "allow-cluster-dns-udp",
-			Protocol:    "UDP",
-			Ports:       "53",
-			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
-			},
-		},
-		{
-			Action:      "ACCEPT",
 			Description: "Calico BGP",
 			Label:       "allow-calico-bgp",
 			Protocol:    "TCP",
 			Ports:       "179",
 			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
+				NodeIPs: true,
 			},
 		},
 		{
@@ -86,7 +66,7 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 			Protocol:    "TCP",
 			Ports:       "5473",
 			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
+				NodeIPs: true,
 			},
 		},
 		{
@@ -115,7 +95,7 @@ var defaultRuleset = alpha1v1.RulesetSpec{
 			Label:       "allow-cluster-ipencap",
 			Protocol:    "IPENCAP",
 			Addresses: alpha1v1.AddressSpec{
-				IPv4: &[]string{"192.168.128.0/17"},
+				NodeIPs: true,
 			},
 		},
 	},

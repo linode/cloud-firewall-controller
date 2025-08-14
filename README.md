@@ -93,8 +93,17 @@ pattern `lke-<cluster-id>` and have the following policies:
 Upgrading the cloud-firewall-controller version will apply the latest ruleset to the primary CloudFirewall custom resource
  if the rules detected match one of the previous revisions from this repo.
 
-If custom rules have been applied via the `firewall` block in the values file, these will be upgraded via a Helm upgrade
-because the custom rules are merged with the defaults using Helm templating.
+As of this release, a new field `spec.defaultRules` (default true) controls whether the built-in default rule set is
+automatically applied. Your CR can be minimal and rely on defaults, and optionally specify custom rules that will be
+appended after the defaults. Existing CRs that matched a known previous default ruleset will be migrated to this model
+automatically by the controller.
+
+Additionally, you can now use `nodeIPs: true` in rule addresses instead of static IP ranges. This automatically
+populates the rule with the private IP addresses of all cluster nodes, making rules dynamic and adapting to cluster
+changes.
+
+If custom rules have been applied via the `firewall` block in the values file, these will be applied by the controller
+in addition to the defaults.
 
 ```yaml
 # Additional Cloud Firewall rules can be added to the default set by adding them to the list below.
@@ -108,8 +117,10 @@ firewall:
       protocol:    "TCP"
       ports:       "9999"
       addresses:
-        ipv4:
-          - "192.168.128.0/17"
+        nodeIPs: true  # Use dynamic node IPs instead of static ranges
+        # Or use static addresses:
+        # ipv4:
+        #   - "192.168.128.0/17"
 ```
 
 Any ruleset customized outside of Helm (e.g., using kubectl) will need to be manually updated.
