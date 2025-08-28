@@ -161,5 +161,3 @@ the most up-to-date defaults. This will avoid having to apply manual changes in 
 kubectl --kubeconfig <kubeconfig> patch cloudfirewalls -n kube-system primary --type=json --patch-f
 ile patch.json
 ```
-```
-```
