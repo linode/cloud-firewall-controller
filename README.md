@@ -124,6 +124,8 @@ If we cannot automatically update the ruleset, you will see the following warnin
 > [!WARNING]
 > CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset
 
+
+### Upgrading Custom Rules
 If you had previously added custom rules to the CloudFirewall object in your cluster you will need to patch the
 existing object after installing the CRD and controller updates. This can be accomplished by creating a patch file
 which contains only your custom rules.
@@ -162,6 +164,7 @@ kubectl --kubeconfig <kubeconfig> patch cloudfirewalls -n kube-system primary --
 ile patch.json
 ```
 
+### Addressing Helm Errors
 When upgrading with helm you may encounter the following error:
 > Error: UPGRADE FAILED: Unable to continue with update: CloudFirewall "primary" in namespace "kube-system" exists and cannot be imported into the current release: invalid ownership metadata; label validation error: missing key "app.kubernetes.io/managed-by": must be set to "Helm"; annotation validation error: missing key "meta.helm.sh/release-name": must be set to "cloud-firewall-ctrl"; annotation validation error: missing key "meta.helm.sh/release-namespace": must be set to "default"
 
