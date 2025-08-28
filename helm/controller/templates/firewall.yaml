@@ -16,9 +16,10 @@ spec:
     {{- else }}
     outbound: []
     {{- end }}
-    {{- if and (hasKey .Values.firewall "inbound") (gt (len .Values.firewall.inbound) 0) }}
-    inbound: {{ toYaml .Values.firewall.inbound| nindent 6 }}
-    {{- else }}
-    inbound: []
-    {{- end }}
+    inbound:
+      {{- if .Values.firewall.inbound }}
+      {{ toYaml .Values.firewall.inbound | nindent 6 }}
+      {{- else }}
+      []
+      {{- end }}
 {{- end }}
