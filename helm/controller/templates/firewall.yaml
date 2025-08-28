@@ -11,15 +11,14 @@ spec:
     # Policies default to DROP/ACCEPT; override if desired
     # inbound_policy:  "DROP"
     # outbound_policy: "ACCEPT"
-    {{- if gt (len .Values.firewall.outbound) 0 }}
+    {{- if and (hasKey .Values.firewall "outbound") (gt (len .Values.firewall.outbound) 0) }}
     outbound: {{ toYaml .Values.firewall.outbound | nindent 6 }}
     {{- else }}
     outbound: []
     {{- end }}
-    inbound:
-      {{- if .Values.firewall.inbound }}
-      {{ toYaml .Values.firewall.inbound | nindent 6 }}
-      {{- else }}
-      []
-      {{- end }}
+    {{- if and (hasKey .Values.firewall "inbound") (gt (len .Values.firewall.inbound) 0) }}
+    inbound: {{ toYaml .Values.firewall.inbound| nindent 6 }}
+    {{- else }}
+    inbound: []
+    {{- end }}
 {{- end }}
