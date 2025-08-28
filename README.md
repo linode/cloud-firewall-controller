@@ -164,6 +164,7 @@ kubectl --kubeconfig <kubeconfig> patch cloudfirewalls -n kube-system primary --
 ile patch.json
 ```
 
+
 ### Addressing Helm Errors
 When upgrading with helm you may encounter the following error:
 > Error: UPGRADE FAILED: Unable to continue with update: CloudFirewall "primary" in namespace "kube-system" exists and cannot be imported into the current release: invalid ownership metadata; label validation error: missing key "app.kubernetes.io/managed-by": must be set to "Helm"; annotation validation error: missing key "meta.helm.sh/release-name": must be set to "cloud-firewall-ctrl"; annotation validation error: missing key "meta.helm.sh/release-namespace": must be set to "default"
