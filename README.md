@@ -123,3 +123,43 @@ If we cannot automatically update the ruleset, you will see the following warnin
 
 > [!WARNING]
 > CloudFirewall object ruleset does not match latest or previous revisions. Cannot upgrade custom ruleset
+
+If you had previously added custom rules to the CloudFirewall object in your cluster you will need to patch the
+existing object after installing the CRD and controller updates. This can be accomplished by creating a patch file
+which contains only your custom rules.
+
+#### patch.json
+```json
+[
+  {
+    "op": "replace",
+    "path": "/spec/ruleset",
+    "value": {
+      "inbound": [
+        {
+          "action": "ACCEPT",
+          "addresses": {
+            "ipv4": [
+              "192.168.128.0/17"
+            ]
+          },
+          "description": "Custom Rule",
+          "label": "allow-custom",
+          "ports": "9999",
+          "protocol": "TCP"
+        }
+      ]
+    }
+  }
+]
+```
+
+The patch can then be applied, which will allow the controller to properly import your rules and merge them with
+the most up-to-date defaults. This will avoid having to apply manual changes in the future.
+
+```bash
+kubectl --kubeconfig <kubeconfig> patch cloudfirewalls -n kube-system primary --type=json --patch-f
+ile patch.json
+```
+```
+```
