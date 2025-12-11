@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	networkingalpha1v1 "bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1"
+	networkingalpha1v1 "github.com/linode/cloud-firewall-controller/api/alpha1v1"
 )
 
 var _ = Describe("CloudFirewall Controller", func() {

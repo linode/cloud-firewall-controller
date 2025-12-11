@@ -1,4 +1,4 @@
-module bits.linode.com/hwagner/cloud-firewall-controller
+module github.com/linode/cloud-firewall-controller
 
 go 1.22.0
 
