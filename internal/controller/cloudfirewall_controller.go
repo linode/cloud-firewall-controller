@@ -359,7 +359,8 @@ func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []in
 			Linodes: nodes,
 		},
 	}
-	if firewall, err := r.lcli.CreateFirewall(ctx, opts); err != nil {
+	var firewall *lgo.Firewall
+	if firewall, err = r.lcli.CreateFirewall(ctx, opts); err != nil {
 		err = fmt.Errorf("failed to create firewall - %s", err.Error())
 	} else {
 		cf.Status.ID = strconv.Itoa(firewall.ID)
