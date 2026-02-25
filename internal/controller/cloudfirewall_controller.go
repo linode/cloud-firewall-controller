@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"reflect"
 	"slices"
 	"sort"
@@ -29,8 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +36,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -58,6 +54,107 @@ type CloudFirewallReconciler struct {
 	lcli      lgo.Client
 	lApiOpts  internal.LinodeApiOptions
 	ClusterID string
+}
+
+func (r *CloudFirewallReconciler) GetLClient() lgo.Client {
+	return r.lcli
+}
+
+var defaultRuleset = alpha1v1.RulesetSpec{
+	Inbound: []alpha1v1.RuleSpec{
+		{
+			Action:      "ACCEPT",
+			Description: "ICMP Traffic",
+			Label:       "allow-all-icmp",
+			Protocol:    "ICMP",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"0.0.0.0/0"},
+				IPv6: &[]string{"::/0"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Kubelet Health Checks",
+			Label:       "allow-kubelet-health-checks",
+			Protocol:    "TCP",
+			Ports:       "10250,10256",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Cluster Wireguard Traffic",
+			Label:       "allow-lke-wireguard",
+			Protocol:    "UDP",
+			Ports:       "51820",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Cluster DNS",
+			Label:       "allow-cluster-dns-tcp",
+			Protocol:    "TCP",
+			Ports:       "53",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Cluster DNS",
+			Label:       "allow-cluster-dns-udp",
+			Protocol:    "UDP",
+			Ports:       "53",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Calico BGP",
+			Label:       "allow-calico-bgp",
+			Protocol:    "TCP",
+			Ports:       "179",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Cluster Nodeports",
+			Label:       "allow-cluster-nodeports-tcp",
+			Protocol:    "TCP",
+			Ports:       "30000-32767",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.255.0/24"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "Cluster Nodeports",
+			Label:       "allow-cluster-nodeports-udp",
+			Protocol:    "UDP",
+			Ports:       "30000-32767",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.255.0/24"},
+			},
+		},
+		{
+			Action:      "ACCEPT",
+			Description: "IPENCAP Private",
+			Label:       "allow-cluster-ipencap",
+			Protocol:    "IPENCAP",
+			Addresses: alpha1v1.AddressSpec{
+				IPv4: &[]string{"192.168.128.0/17"},
+			},
+		},
+	},
+	InboundPolicy:  "DROP",
+	Outbound:       []alpha1v1.RuleSpec{},
+	OutboundPolicy: "ACCEPT",
 }
 
 // +kubebuilder:rbac:groups=networking.linode.com,resources=cloudfirewalls,verbs=get;list;watch;create;update;patch;delete
@@ -118,7 +215,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	klog.Infof("[%s/%s] using clusterID (%s)", cf.Namespace, cf.Name, r.ClusterID)
 
-	if err = r.createLinodeClient(r.lApiOpts); err != nil {
+	if err = createLinodeClient(r, r.lApiOpts); err != nil {
 		// can't proceed without valid Linode Creds, retry on exponential backoff
 		klog.Errorf("[%s/%s] failed to get API credentials - %s", r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs, err.Error())
 		return
@@ -217,7 +314,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if len(added) != 0 {
-		if err = r.addNodes(ctx, added, firewallID, &cf); err != nil {
+		if err = r.addDevices(ctx, added, firewallID, &cf); err != nil {
 			klog.Infof("[%s/%s] failed to add nodes to firewall id=(%d) - %s", cf.Namespace, cf.Name, firewallID, err.Error())
 			return
 		}
@@ -225,7 +322,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if len(removed) != 0 {
-		if err = r.removeNodes(ctx, removed, firewallID, &cf); err != nil {
+		if err = r.removeDevices(ctx, removed, firewallID, &cf); err != nil {
 			klog.Infof("[%s/%s] failed to remove nodes from firewall - %s", cf.Namespace, cf.Name, err.Error())
 			return
 		}
@@ -240,115 +337,24 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}, nil
 }
 
-func remove(s []int, i int) []int {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
-}
-
 func (r *CloudFirewallReconciler) checkOwnership(ctx context.Context, cf *alpha1v1.CloudFirewall) error {
-	owner := metav1.GetControllerOf(cf)
-	if owner != nil {
-		return nil
-	}
-
-	// If the CloudFirewall has no owner attach it to this controller so it can be garbage
-	// collected if the controller is deleted.
-	ctrlDpl := appsv1.Deployment{}
-	err := r.Get(ctx, client.ObjectKey{
-		Name:      "cloud-firewall-controller",
-		Namespace: "kube-system",
-	},
-		&ctrlDpl)
-	if err != nil {
-		return fmt.Errorf("failed to get controller deployment: %s", err.Error())
-	}
-
-	klog.Infof("[%s/%s] set controller reference controller=(%s/%s)", cf.Namespace, cf.Name, ctrlDpl.Namespace, ctrlDpl.Name)
-	if err = ctrl.SetControllerReference(&ctrlDpl, cf, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference: %s", err.Error())
-	}
-
-	return nil
+	return checkOwnership(ctx, r, cf, r.Scheme)
 }
 
 func (r *CloudFirewallReconciler) checkFinalizer(ctx context.Context, cf *alpha1v1.CloudFirewall) (bool, error) {
-	finalizerName := "cloudfirewalls.networking.linode.com/finalizer"
-	deleted := false
-
-	if cf.DeletionTimestamp.IsZero() {
-		klog.Infof("[%s/%s] adding finalizer finalizer=(%s) id=(%s)", cf.Namespace, cf.Name, finalizerName, cf.Status.ID)
-		if !controllerutil.ContainsFinalizer(cf, finalizerName) {
-			controllerutil.AddFinalizer(cf, finalizerName)
-			return deleted, nil
-		}
-	} else {
-		if controllerutil.ContainsFinalizer(cf, finalizerName) {
-			// our finalizer is present, so lets handle firewall deletion
-			if err := r.deleteExternalResources(context.WithoutCancel(ctx), cf); err != nil {
-				// if fail to delete the external dependency here, return with error
-				// so that it can be retried.
-				if !FirewallIsNotFound(err) {
-					// The firewall exists, but some other error occured.
-					return deleted, err
-				}
-			}
-			klog.Infof("[%s/%s] firewall deleted id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
-			deleted = true
-
-			// remove our finalizer from the list and update it.
-			if controllerutil.RemoveFinalizer(cf, finalizerName) {
-				if err := r.Update(context.WithoutCancel(ctx), cf); err != nil {
-					klog.Infof("[%s/%s] failed to update finalizer - %s", cf.Namespace, cf.Name, err.Error())
-				}
-			} else {
-				klog.Infof("[%s/%s] failed to remove finalizer id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
-			}
-		} else {
-			klog.Infof("[%s/%s] deletion called with no finalizer found id=(%s)", cf.Namespace, cf.Name, cf.Status.ID)
-		}
-	}
-
-	return deleted, nil
+	return checkFinalizer(ctx, r, cf, "cloudfirewalls")
 }
 
-func (r CloudFirewallReconciler) deleteExternalResources(ctx context.Context, cf *alpha1v1.CloudFirewall) (err error) {
-	klog.Infof("[%s/%s] deleting firewall (%s)", cf.Namespace, cf.Name, cf.Status.ID)
-	cfId, err := cf.GetID()
-	if err != nil {
-		err = fmt.Errorf("failed to get cluster ID - %s", err.Error())
-	}
-
-	if err = r.lcli.DeleteFirewall(ctx, cfId); err != nil {
-		return err
-	}
-	return
+func (r *CloudFirewallReconciler) deleteExternalResources(ctx context.Context, cf FirewallObject) error {
+	return deleteExternalResources(ctx, r, cf)
 }
 
-func (r *CloudFirewallReconciler) removeNodes(ctx context.Context, nodes []int, firewallID int, cf *alpha1v1.CloudFirewall) (err error) {
-	for _, node := range nodes {
-		if err = r.lcli.DeleteFirewallDevice(ctx, firewallID, node); err != nil {
-			err = fmt.Errorf("failed to remove device (%d) from firewall (%d) - %s", node, firewallID, err.Error())
-		}
-		// Remove the node from status list
-		idx := slices.Index(cf.Status.Nodes, node)
-		cf.Status.Nodes = remove(cf.Status.Nodes, idx)
-	}
-	return
+func (r *CloudFirewallReconciler) removeDevices(ctx context.Context, nodes []int, firewallID int, nf *alpha1v1.CloudFirewall) error {
+	return removeDevices(ctx, r, nodes, firewallID, &nf.Status.Nodes)
 }
 
-func (r *CloudFirewallReconciler) addNodes(ctx context.Context, nodes []int, firewallID int, cf *alpha1v1.CloudFirewall) (err error) {
-	for _, node := range nodes {
-		opts := lgo.FirewallDeviceCreateOptions{
-			ID:   node,
-			Type: lgo.FirewallDeviceLinode,
-		}
-		if _, err = r.lcli.CreateFirewallDevice(ctx, firewallID, opts); err != nil {
-			err = fmt.Errorf("failed to add device (%d) to firewall (%d)", node, firewallID)
-			return
-		}
-		cf.Status.Nodes = append(cf.Status.Nodes, node)
-	}
-	return
+func (r *CloudFirewallReconciler) addDevices(ctx context.Context, nodes []int, firewallID int, nf *alpha1v1.CloudFirewall) error {
+	return addDevices(ctx, r, nodes, firewallID, lgo.FirewallDeviceLinode, &nf.Status.Nodes)
 }
 
 func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []int, cf *alpha1v1.CloudFirewall, rs lgo.FirewallRuleSet) (err error) {
@@ -362,6 +368,7 @@ func (r *CloudFirewallReconciler) createFirewall(ctx context.Context, nodes []in
 	var firewall *lgo.Firewall
 	if firewall, err = r.lcli.CreateFirewall(ctx, opts); err != nil {
 		err = fmt.Errorf("failed to create firewall - %s", err.Error())
+		return err
 	} else {
 		cf.Status.ID = strconv.Itoa(firewall.ID)
 		cf.Status.Nodes = nodes
@@ -746,29 +753,29 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 				))).Complete(r)
 }
 
-func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
-	creds := &corev1.Secret{}
-	err = r.Get(context.TODO(), client.ObjectKey{
-		Name:      opts.Credentials,
-		Namespace: opts.CredentialsNs,
-	},
-		creds)
-	if err != nil {
-		return fmt.Errorf("failed to get API credentails: %s", err.Error())
-	}
+// func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
+// 	creds := &corev1.Secret{}
+// 	err = r.Get(context.TODO(), client.ObjectKey{
+// 		Name:      opts.Credentials,
+// 		Namespace: opts.CredentialsNs,
+// 	},
+// 		creds)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to get API credentails: %s", err.Error())
+// 	}
 
-	apiKey := creds.Data["token"]
-	if len(apiKey) == 0 {
-		return fmt.Errorf("failed to parse Linode API token")
-	}
-	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
-	oauth2Client := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: tokenSource,
-		},
-	}
-	r.lcli = lgo.NewClient(oauth2Client)
-	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
-	r.lcli.SetDebug(opts.Debug)
-	return
-}
+// 	apiKey := creds.Data["token"]
+// 	if len(apiKey) == 0 {
+// 		return fmt.Errorf("failed to parse Linode API token")
+// 	}
+// 	tokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(apiKey[:])})
+// 	oauth2Client := &http.Client{
+// 		Transport: &oauth2.Transport{
+// 			Source: tokenSource,
+// 		},
+// 	}
+// 	r.lcli = lgo.NewClient(oauth2Client)
+// 	r.lcli.SetUserAgent(fmt.Sprintf("cloud-firewall-controller %s", lgo.DefaultUserAgent))
+// 	r.lcli.SetDebug(opts.Debug)
+// 	return
+// }

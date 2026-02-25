@@ -105,6 +105,9 @@ func (cf *CloudFirewall) GetID() (int, error) {
 		return 0, fmt.Errorf("CloudFirewall ID does not exist")
 	}
 }
+func (cf *CloudFirewall) GetStatusID() string {
+	return cf.Status.ID
+}
 
 // +kubebuilder:object:root=true
 
