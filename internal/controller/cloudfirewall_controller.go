@@ -160,7 +160,6 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Infof("[%s/%s] update duration not met - requeuing %v", cf.Namespace, cf.Name, minimumUpdateDuration)
 		return ctrl.Result{
 			RequeueAfter: minimumUpdateDuration,
-			Requeue:      true,
 		}, nil
 	}
 
@@ -175,7 +174,6 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Errorf("[%s/%s] failed finalizer check - %s", cf.Namespace, cf.Name, err.Error())
 		return ctrl.Result{
 			RequeueAfter: minimumUpdateDuration,
-			Requeue:      true,
 		}, err
 	}
 
@@ -183,7 +181,6 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		klog.Errorf("[%s/%s] failed finalizer check - %s", cf.Namespace, cf.Name, err.Error())
 		return ctrl.Result{
 			RequeueAfter: minimumUpdateDuration,
-			Requeue:      true,
 		}, err
 	} else if deleted {
 		return
@@ -235,7 +232,6 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Periodically we can reconcile to verify status
 	klog.Infof("[%s/%s] reconcile complete firewall id=(%d)", cf.Namespace, cf.Name, firewallID)
 	return ctrl.Result{
-		Requeue:      false,
 		RequeueAfter: 10 * time.Hour,
 	}, nil
 }
