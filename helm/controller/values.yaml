@@ -55,3 +55,25 @@ firewall: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+apiToken: ""
+
+nodebalancer_firewall:
+ outbound: []
+ inbound: 
+   - label:       "allow-http-port"
+     action:      "ACCEPT"
+     description: "http-rule"
+     protocol:    "TCP"
+     ports:       "80"
+     addresses:
+       ipv4:
+       - "123.123.123.123/24"
+   - label:       "allow-https-port"
+     action:      "ACCEPT"
+     description: "https-rule"
+     protocol:    "TCP"
+     ports:       "443"
+     addresses:
+       ipv4:
+       - "123.123.123.123/24"

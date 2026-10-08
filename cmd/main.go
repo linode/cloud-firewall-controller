@@ -36,9 +36,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	alpha1v1 "github.com/linode/cloud-firewall-controller/api/alpha1v1"
-	"github.com/linode/cloud-firewall-controller/internal/controller"
-	"github.com/linode/cloud-firewall-controller/internal/types"
+	alpha1v1 "bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1"
+	networkingalpha1v1 "bits.linode.com/hwagner/cloud-firewall-controller/api/alpha1v1"
+	"bits.linode.com/hwagner/cloud-firewall-controller/internal/controller"
+	"bits.linode.com/hwagner/cloud-firewall-controller/internal/types"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -51,6 +52,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(alpha1v1.AddToScheme(scheme))
+	utilruntime.Must(networkingalpha1v1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -163,6 +165,19 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "CloudFirewall")
 		os.Exit(1)
 	}
+
+	if err = (&controller.NodeBalancerFirewallReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, types.LinodeApiOptions{
+		Credentials:   apiCreds,
+		CredentialsNs: apiCredsNs,
+		Debug:         apiDebug,
+	}); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NodeBalancerFirewall")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

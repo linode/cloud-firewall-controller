@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - networking_alpha1v1_cloudfirewall.yaml
+- networking_alpha1v1_nodebalancerfirewall.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
