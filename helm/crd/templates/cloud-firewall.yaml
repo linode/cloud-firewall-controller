@@ -37,13 +37,33 @@ spec:
           metadata:
             type: object
           spec:
-            description: CloudFirewallSpec defines the desired state of CloudFirewall
+            description: |-
+              CloudFirewallSpec defines the desired state of CloudFirewall
+
+              Importing replaces the firewall's whole ruleset, and the built-in defaults are
+              written for standard LKE, so import mode requires an explicit decision about
+              them, and defaultRules=false requires the rules the firewall needs. The
+              controller enforces the same checks for CRDs that predate these rules.
             properties:
               defaultRules:
-                default: true
-                description: When true, controller applies built-in default rules in addition to user rules.
+                description: |-
+                  When true (the default when unset), the controller will automatically apply the
+                  built-in default ruleset in addition to any user-specified rules in .spec.ruleset.
+                  Set to false to opt-out and manage all rules yourself. Required when firewall-id
+                  is set. There is deliberately no schema default: the controller treats unset as
+                  true, and leaving it unset lets import mode tell "not decided" from "true".
                 type: boolean
               firewall-id:
+                description: |-
+                  ID of an existing Cloud Firewall to manage instead of creating one. When set,
+                  the controller only reconciles the firewall's rules (inbound, outbound and both
+                  policies): it does not create the firewall, does not add or remove devices (the
+                  firewall is expected to already be attached, e.g. via an LKE node pool's
+                  firewall_id), and does not delete the firewall. A firewall attached to any
+                  device outside this cluster is refused. Requires defaultRules to be set.
+                  Removing this field releases the firewall untouched and the controller goes back
+                  to creating its own.
+                pattern: ^[0-9]+$
                 type: string
               ruleset:
                 properties:
@@ -97,10 +117,10 @@ spec:
                       type: object
                     type: array
                   inbound_policy:
+                    default: DROP
                     enum:
                     - ACCEPT
                     - DROP
-                    default: DROP
                     type: string
                   outbound:
                     items:
@@ -152,16 +172,87 @@ spec:
                       type: object
                     type: array
                   outbound_policy:
+                    default: ACCEPT
                     enum:
                     - ACCEPT
                     - DROP
-                    default: ACCEPT
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: defaultRules must be set explicitly when firewall-id is set
+              rule: '!has(self.firewall__dash__id) || has(self.defaultRules)'
+            - message: with firewall-id set and defaultRules false, ruleset.inbound
+                must list the rules the firewall needs
+              rule: '!has(self.firewall__dash__id) || !has(self.defaultRules) || self.defaultRules
+                || (has(self.ruleset) && has(self.ruleset.inbound) && size(self.ruleset.inbound)
+                > 0)'
           status:
             description: CloudFirewallStatus defines the observed state of CloudFirewall
             properties:
+              conditions:
+                description: |-
+                  Conditions report import-mode state: Imported (adopted, or why not) and
+                  NodesProtected (whether every node is attached to an imported firewall).
+                  Informational only; the controller never derives ownership from them.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               firewall-id:
                 type: string
               last-update:

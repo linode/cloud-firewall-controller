@@ -65,14 +65,31 @@ type RulesetSpec struct {
 }
 
 // CloudFirewallSpec defines the desired state of CloudFirewall
+//
+// Importing replaces the firewall's whole ruleset, and the built-in defaults are
+// written for standard LKE, so import mode requires an explicit decision about
+// them, and defaultRules=false requires the rules the firewall needs. The
+// controller enforces the same checks for CRDs that predate these rules.
+// +kubebuilder:validation:XValidation:rule="!has(self.firewall__dash__id) || has(self.defaultRules)",message="defaultRules must be set explicitly when firewall-id is set"
+// +kubebuilder:validation:XValidation:rule="!has(self.firewall__dash__id) || !has(self.defaultRules) || self.defaultRules || (has(self.ruleset) && has(self.ruleset.inbound) && size(self.ruleset.inbound) > 0)",message="with firewall-id set and defaultRules false, ruleset.inbound must list the rules the firewall needs"
 type CloudFirewallSpec struct {
-	// When true (default), the controller will automatically apply the built-in default
-	// ruleset in addition to any user-specified rules in .spec.ruleset.
-	// Set to false to opt-out and manage all rules yourself.
-	// +kubebuilder:default=true
-	DefaultRules *bool       `json:"defaultRules,omitempty"`
-	ImportID     string      `json:"firewall-id,omitempty"`
-	Ruleset      RulesetSpec `json:"ruleset,omitempty"`
+	// When true (the default when unset), the controller will automatically apply the
+	// built-in default ruleset in addition to any user-specified rules in .spec.ruleset.
+	// Set to false to opt-out and manage all rules yourself. Required when firewall-id
+	// is set. There is deliberately no schema default: the controller treats unset as
+	// true, and leaving it unset lets import mode tell "not decided" from "true".
+	DefaultRules *bool `json:"defaultRules,omitempty"`
+	// ID of an existing Cloud Firewall to manage instead of creating one. When set,
+	// the controller only reconciles the firewall's rules (inbound, outbound and both
+	// policies): it does not create the firewall, does not add or remove devices (the
+	// firewall is expected to already be attached, e.g. via an LKE node pool's
+	// firewall_id), and does not delete the firewall. A firewall attached to any
+	// device outside this cluster is refused. Requires defaultRules to be set.
+	// Removing this field releases the firewall untouched and the controller goes back
+	// to creating its own.
+	// +kubebuilder:validation:Pattern=`^[0-9]+$`
+	ImportID string      `json:"firewall-id,omitempty"`
+	Ruleset  RulesetSpec `json:"ruleset,omitempty"`
 }
 
 // CloudFirewallStatus defines the observed state of CloudFirewall
@@ -80,7 +97,20 @@ type CloudFirewallStatus struct {
 	ID         string      `json:"firewall-id,omitempty"`
 	Nodes      []int       `json:"nodes,omitempty"`
 	LastUpdate metav1.Time `json:"last-update,omitempty"`
+	// Conditions report import-mode state: Imported (adopted, or why not) and
+	// NodesProtected (whether every node is attached to an imported firewall).
+	// Informational only; the controller never derives ownership from them.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
+
+// Condition types and reasons set in .status.conditions.
+const (
+	ConditionImported       = "Imported"
+	ConditionNodesProtected = "NodesProtected"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -96,6 +126,37 @@ type CloudFirewall struct {
 
 func (cf *CloudFirewall) Exists() bool {
 	return cf.Status.ID != ""
+}
+
+// ImportedAnnotation records the ID of the firewall the controller adopted from
+// .spec.firewall-id. It is managed by the controller; do not edit it.
+//
+// It lives in metadata, not status, on purpose. With a CRD older than the
+// controller (the CRD ships as a separate chart), the API server silently prunes
+// status fields the CRD does not declare, and losing this marker would make an
+// adopted firewall look controller-created: one the controller then attaches
+// devices to and deletes. Metadata is never pruned.
+const ImportedAnnotation = "networking.linode.com/imported-firewall-id"
+
+// ImportRequested reports whether .spec.firewall-id asks the controller to adopt
+// an existing firewall.
+func (cf *CloudFirewall) ImportRequested() bool {
+	return cf.Spec.ImportID != ""
+}
+
+// ImportedID returns the ID of the firewall the controller adopted, or "".
+func (cf *CloudFirewall) ImportedID() string {
+	return cf.Annotations[ImportedAnnotation]
+}
+
+// MarkedImported reports whether the firewall in .status is recorded as adopted
+// (ImportedAnnotation) or named by .spec.firewall-id. Either marker excludes it
+// from ownership, but neither proves ownership by its absence: the controller
+// only treats a firewall as its own after checking the firewall itself (see the
+// reconciler's owns), so losing a marker can never get a firewall deleted.
+func (cf *CloudFirewall) MarkedImported() bool {
+	id := cf.Status.ID
+	return id != "" && (id == cf.ImportedID() || id == cf.Spec.ImportID)
 }
 
 func (cf *CloudFirewall) GetID() (int, error) {

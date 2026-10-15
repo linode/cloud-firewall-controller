@@ -6,7 +6,25 @@ metadata:
   namespace: kube-system
 spec:
   # defaultRules is true by default; leave empty to use defaults only
-  # defaultRules: true
+  {{- if hasKey .Values.firewall "defaultRules" }}
+  defaultRules: {{ .Values.firewall.defaultRules }}
+  {{- end }}
+  {{- with .Values.firewall.firewallID }}
+  {{- /* A YAML number arrives as float64; render it as an integer, and reject
+         anything that is not a plain numeric ID rather than coercing it. */}}
+  {{- $id := ternary . (toString (int64 .)) (kindIs "string" .) }}
+  {{- if and (not (kindIs "string" .)) (ne (float64 .) (float64 (int64 .))) }}
+  {{- $id = "" }}
+  {{- end }}
+  {{- if not (regexMatch "^[0-9]+$" $id) }}
+  {{- fail (printf "firewall.firewallID must be a numeric Cloud Firewall ID, got %q" (toString .)) }}
+  {{- end }}
+  {{- if not (hasKey $.Values.firewall "defaultRules") }}
+  {{- fail "firewall.defaultRules must be set explicitly with firewall.firewallID: importing replaces the firewall's rules, and the defaults are written for standard LKE" }}
+  {{- end }}
+  # Manage this existing firewall (rules only) instead of creating one.
+  firewall-id: {{ $id | quote }}
+  {{- end }}
   ruleset:
     # Policies default to DROP/ACCEPT; override if desired
     # inbound_policy:  "DROP"

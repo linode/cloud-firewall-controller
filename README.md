@@ -88,6 +88,93 @@ The output from the controller is pretty straight forward, it will generate a Cl
 pattern `lke-<cluster-id>` and have the following policies:
 ![image](./docs/images/default-result.png)
 
+## Using an existing firewall (e.g. one attached by an LKE node pool)
+
+By default the controller creates its own firewall and attaches every node to it. That
+conflicts with a firewall you already attach another way, most commonly the `firewall_id`
+of an LKE node pool (set through the Linode API, the Cloud Manager, or the Terraform
+`linode_lke_node_pool` resource), because LKE attaches that firewall to every node the pool
+creates.
+
+Set `spec.firewall-id` to manage that firewall instead. `defaultRules` must then be set
+explicitly, because importing replaces the firewall's rules:
+
+```yaml
+apiVersion: networking.linode.com/alpha1v1
+kind: CloudFirewall
+metadata:
+  name: primary
+  namespace: kube-system
+spec:
+  firewall-id: "123456"
+  defaultRules: false
+  ruleset:
+    inbound: [...]   # every rule the firewall needs
+```
+
+or through the chart, which also turns off auto-creation of an empty default object
+(`--auto-create-default=false`) so it cannot create a second firewall first:
+
+```yaml
+firewall:
+  firewallID: "123456"
+  defaultRules: false
+  inbound: [...]
+```
+
+With `firewall-id` set, the controller:
+
+- reconciles the firewall's **rules** to the default ruleset (if `defaultRules: true`) plus
+  `spec.ruleset`, **replacing all of the firewall's existing rules**: inbound, outbound and
+  both policies;
+- does **not** create a firewall, and does not recreate the firewall if it is deleted
+  (the reconcile reports an error instead);
+- does **not** add or remove devices, so attachment stays with the node pool;
+- does **not** delete the firewall, and puts no finalizer on the object, so deleting the
+  object or uninstalling the controller leaves the firewall as it is.
+
+> [!WARNING]
+> The built-in defaults are written for a standard LKE cluster. If the firewall you import
+> carries rules your cluster depends on (for example VPC rules on an LKE Enterprise cluster),
+> set `defaultRules: false` and list every rule you need in `spec.ruleset.inbound`, or those
+> rules are removed on the first reconcile. An empty inbound ruleset under the `DROP` policy
+> would cut the nodes off, so `defaultRules: false` without inbound rules is rejected.
+
+Progress and problems are reported as conditions on the object (`kubectl get cloudfirewall -o yaml`)
+and as Events:
+
+- `Imported`: `True` once the firewall is adopted; `False` with the reason (refused, not found,
+  invalid spec) otherwise.
+- `NodesProtected`: `False` when a node is not attached to the imported firewall and so is not
+  protected by it.
+
+The controller refuses to import a firewall that is attached to any device outside this
+cluster: another cluster's node pool, a standalone Linode, or a NodeBalancer. Importing
+replaces the firewall's whole ruleset, so those devices would get this cluster's rules, and a
+firewall shared by two clusters would be overwritten by each cluster's controller in turn. Use a
+separate firewall per cluster. A Linode that belongs to this LKE cluster but has not registered
+as a Node yet is not treated as foreign.
+
+Changing `firewall-id` on an existing object:
+
+- **Adding it** to an object whose firewall the controller created applies the rules to the
+  imported firewall, moves each node onto it (one detach and attach at a time, since a Linode
+  can only be on one Cloud Firewall), and then deletes the old firewall.
+- **Changing it** to another ID adopts the new firewall and leaves the previous one in place.
+- **Removing it** releases the imported firewall exactly as it is (rules and devices untouched,
+  never deleted). The controller then creates and attaches its own firewall as for a new object,
+  which fails while a node pool still attaches a firewall to the nodes, so detach that first.
+
+The controller only ever deletes, or manages the devices of, a firewall it created: one
+labelled `lke-<cluster-id>` that is not recorded as imported. It records the adopted firewall in
+the `networking.linode.com/imported-firewall-id` annotation (do not edit it), which lives in
+metadata so that a CRD older than the controller cannot drop it. Losing the annotation can never
+get a firewall deleted, because deletion requires the firewall to carry the controller's label.
+
+With a CRD older than this change, `defaultRules` is defaulted to `true` at admission, so the
+explicit-choice check cannot apply there; upgrade the CRD chart, or set `defaultRules` in the
+controller chart, which enforces it.
+
 ## Upgrades
 
 Upgrading the cloud-firewall-controller version will apply the latest ruleset to the primary CloudFirewall custom resource

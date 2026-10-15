@@ -34,6 +34,10 @@ spec:
           args:
             - --leader-elect
             - --health-probe-bind-address=:8081
+            {{- /* A chart-managed import CloudFirewall is applied with the controller;
+                   an auto-created default object could win the race and create a
+                   second firewall first, so auto-create is off in import mode. */}}
+            - --auto-create-default={{ and .Values.autoCreateDefault (not (and .Values.firewall .Values.firewall.firewallID)) }}
             {{- if .Values.apiToken }}
             - --linode-creds=linode-cfw
             - --linode-creds-ns={{ required ".Values.namespace required" .Values.namespace }}

@@ -56,6 +56,7 @@ func init() {
 
 func main() {
 	var apiDebug bool
+	var autoCreateDefault bool
 	var apiCreds string
 	var apiCredsNs string
 	var metricsAddr string
@@ -80,6 +81,9 @@ func main() {
 	flag.StringVar(&apiCreds, "linode-creds", "linode", "The name of the Secret containing Linode API credentials.")
 	flag.StringVar(&apiCredsNs, "linode-creds-ns", "kube-system", "The namespace of the Secret containing Linode API credentials.")
 	flag.BoolVar(&apiDebug, "linode-api-debug", false, "Setting to true will enable Linode API Debugging for Linode Client.")
+	flag.BoolVar(&autoCreateDefault, "auto-create-default", true,
+		"Create an empty kube-system/primary CloudFirewall when none exists. Disable when a CloudFirewall "+
+			"using firewall-id is delivered separately, so a default object cannot create a second firewall first.")
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -153,8 +157,10 @@ func main() {
 	}
 
 	if err = (&controller.CloudFirewallReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          mgr.GetEventRecorder("cloud-firewall-controller"),
+		AutoCreateDefault: autoCreateDefault,
 	}).SetupWithManager(mgr, types.LinodeApiOptions{
 		Credentials:   apiCreds,
 		CredentialsNs: apiCredsNs,

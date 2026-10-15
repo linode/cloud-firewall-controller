@@ -46,6 +46,13 @@ var (
 	testEnv   *envtest.Environment
 	ctx       context.Context
 	cancel    context.CancelFunc
+
+	// legacyClient talks to a second API server running the CRD as it was before
+	// firewall-id was implemented. The CRD ships as its own chart, so a cluster can
+	// run a newer controller against it; specs that must hold under that skew run
+	// against both servers.
+	legacyClient client.Client
+	legacyEnv    *envtest.Environment
 )
 
 func TestControllers(t *testing.T) {
@@ -87,6 +94,17 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	By("bootstrapping a test environment with the pre-firewall-id CRD")
+	legacyEnv = &envtest.Environment{
+		CRDDirectoryPaths:     []string{filepath.Join("testdata", "crd-before-import")},
+		ErrorIfCRDPathMissing: true,
+		BinaryAssetsDirectory: testEnv.BinaryAssetsDirectory,
+	}
+	legacyCfg, err := legacyEnv.Start()
+	Expect(err).NotTo(HaveOccurred())
+	legacyClient, err = client.New(legacyCfg, client.Options{Scheme: scheme.Scheme})
+	Expect(err).NotTo(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {
@@ -94,4 +112,5 @@ var _ = AfterSuite(func() {
 	cancel()
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+	Expect(legacyEnv.Stop()).To(Succeed())
 })

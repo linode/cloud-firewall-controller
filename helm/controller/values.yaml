@@ -37,10 +37,21 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
+# Create an empty kube-system/primary CloudFirewall when none exists. Forced off when
+# firewall.firewallID is set (see templates/deployment.yaml).
+autoCreateDefault: true
+
 # Additional Cloud Firewall rules can be added to the default set by adding them to the list below.
 # These will be applied along with the default ruleset. Any rule added here will below
 # applied to all nodes in the cluster.
 firewall: {}
+# Manage an existing Cloud Firewall instead of creating one, e.g. the firewall an
+# LKE node pool attaches through its firewall_id. The controller then reconciles
+# only that firewall's rules: it does not add or remove devices and does not
+# delete the firewall on uninstall. Note that the rules are fully replaced with
+# the default ruleset (unless defaultRules is false) plus the inbound rules below.
+#  firewallID: "123456"
+#  defaultRules: true
 # Example custom inbound rule.
 #  inbound: 
 #    - label:       "allow-custom-port"
