@@ -54,6 +54,9 @@ import (
 // CloudFirewallReconciler reconciles a CloudFirewall object
 type CloudFirewallReconciler struct {
 	client.Client
+	// APIReader reads directly from the API server, bypassing the cache, so that
+	// fetching the credentials Secret does not start a cluster-wide Secret informer.
+	APIReader client.Reader
 	Scheme    *runtime.Scheme
 	lcli      lgo.Client
 	lApiOpts  internal.LinodeApiOptions
@@ -67,9 +70,8 @@ type CloudFirewallReconciler struct {
 // Additional required resource permissions
 // watch nodes
 //+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
-// watch and get Linode API token
-//+kubebuilder:rbac:groups="",namespace=kube-system,resourceNames=linode,resources=secrets,verbs=get;list;watch
+// get Linode API token
+// +kubebuilder:rbac:groups="",namespace=kube-system,resourceNames=linode,resources=secrets,verbs=get
 
 func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	_ = log.FromContext(ctx)
@@ -118,7 +120,7 @@ func (r *CloudFirewallReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	klog.Infof("[%s/%s] using clusterID (%s)", cf.Namespace, cf.Name, r.ClusterID)
 
-	if err = r.createLinodeClient(r.lApiOpts); err != nil {
+	if err = r.createLinodeClient(ctx, r.lApiOpts); err != nil {
 		// can't proceed without valid Linode Creds, retry on exponential backoff
 		klog.Errorf("[%s/%s] failed to get API credentials - %s", r.lApiOpts.Credentials, r.lApiOpts.CredentialsNs, err.Error())
 		return
@@ -742,9 +744,11 @@ func (r *CloudFirewallReconciler) SetupWithManager(mgr ctrl.Manager, opts intern
 				))).Complete(r)
 }
 
-func (r *CloudFirewallReconciler) createLinodeClient(opts internal.LinodeApiOptions) (err error) {
+func (r *CloudFirewallReconciler) createLinodeClient(ctx context.Context, opts internal.LinodeApiOptions) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	creds := &corev1.Secret{}
-	err = r.Get(context.TODO(), client.ObjectKey{
+	err = r.APIReader.Get(ctx, client.ObjectKey{
 		Name:      opts.Credentials,
 		Namespace: opts.CredentialsNs,
 	},
