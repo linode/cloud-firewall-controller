@@ -153,8 +153,9 @@ func main() {
 	}
 
 	if err = (&controller.CloudFirewallReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
 	}).SetupWithManager(mgr, types.LinodeApiOptions{
 		Credentials:   apiCreds,
 		CredentialsNs: apiCredsNs,

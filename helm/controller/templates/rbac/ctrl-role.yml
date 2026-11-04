@@ -20,16 +20,6 @@ rules:
   - watch
 - apiGroups:
   - ""
-  resourceNames:
-  - linode
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
   resources:
   - configmaps
   verbs:

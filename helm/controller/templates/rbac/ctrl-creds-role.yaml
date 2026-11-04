@@ -1,0 +1,38 @@
+{{- $credsName := "linode" }}
+{{- $credsNs := "kube-system" }}
+{{- if .Values.apiToken }}
+{{- $credsName = "linode-cfw" }}
+{{- $credsNs = required ".Values.namespace required" .Values.namespace }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloud-firewall-controller-credentials
+  namespace: {{ $credsNs }}
+rules:
+- apiGroups:
+  - ""
+  resourceNames:
+  - {{ $credsName }}
+  resources:
+  - secrets
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: cloud-firewall-controller
+    app.kubernetes.io/managed-by: helm
+  name: cloud-firewall-controller-credentials
+  namespace: {{ $credsNs }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloud-firewall-controller-credentials
+subjects:
+- kind: ServiceAccount
+  name: cloud-firewall-controller
+  namespace: {{ required ".Values.namespace required" .Values.namespace }}
