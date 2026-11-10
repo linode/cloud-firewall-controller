@@ -7,15 +7,24 @@ import (
 )
 
 func TestLatestRevision(t *testing.T) {
-	expected := "b4d67f20643ded4ad14eb326312a29da2b29724c15b997da0447b5cc1e8f1856"
+	expected := "4a4a59f44b46d3d73edf7bf4381ba40097b47eff192d82003a7ee42fead1334b"
 	got := LatestRevision()
 	if got != expected {
 		t.Errorf("LatestRevision() = %s; want %s", got, expected)
 	}
 }
 
+func TestDefaultRulesetDoesNotAllowWireGuard(t *testing.T) {
+	for _, rule := range DefaultRuleset().Inbound {
+		if rule.Protocol == "UDP" && rule.Ports == "51820" {
+			t.Fatal("default ruleset still allows WireGuard traffic on UDP port 51820")
+		}
+	}
+}
+
 func TestPreviousRevisions(t *testing.T) {
 	expected := []string{
+		"b4d67f20643ded4ad14eb326312a29da2b29724c15b997da0447b5cc1e8f1856",
 		"71541101aeff16632d0487a6adb56429c3cf32251cb980cd3dfe95d671b11d3f",
 		"dbb5961ab214991516af923e2b5971dcb676f5837f7693cc6512eff0bbeda9e7",
 		"570433286c7785bf9f9a2424e3f41c93c3c726f06c8b5d7c24811b47cbbf25e0",
