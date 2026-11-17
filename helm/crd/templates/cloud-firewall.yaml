@@ -4,6 +4,11 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.1
+    {{- if .Values.crds }}
+    {{- with .Values.crds.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
   name: cloudfirewalls.networking.linode.com
 spec:
   group: networking.linode.com
