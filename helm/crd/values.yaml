@@ -1,0 +1,5 @@
+# Default values for cloud-firewall-crd.
+crds:
+  # Additional annotations to add to the CustomResourceDefinition, for example
+  # helm.sh/resource-policy: keep, or argocd.argoproj.io/sync-wave: "-1".
+  annotations: {}
